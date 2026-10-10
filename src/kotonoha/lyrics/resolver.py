@@ -33,7 +33,7 @@ from .workflow import ResolverLookup
 logger = logging.getLogger(__name__)
 
 ResolutionCacheKey: TypeAlias = tuple[str, tuple[str, ...], tuple[str, ...], str, float | None]
-RequestKey: TypeAlias = tuple[ResolutionCacheKey, tuple[str, ...], bool, bool, bool]
+RequestKey: TypeAlias = tuple[TrackMetadata, tuple[str, ...], bool, bool, bool]
 
 _CONF_RANK = {MatchConfidence.NONE: 0, MatchConfidence.MEDIUM: 1, MatchConfidence.HIGH: 2}
 
@@ -134,7 +134,7 @@ class LyricsResolver:
     ) -> ResolverLookup:
         """Resolve one track while preserving failures for that request."""
         ordered_sources = tuple(sources)
-        key = (_resolution_cache_key(track), ordered_sources, self._cache_enabled, self._prefer_best, self._fuzzy)
+        key = (track, ordered_sources, self._cache_enabled, self._prefer_best, self._fuzzy)
         task = self._inflight.get(key)
         if task is None:
             task = create_owned_task(

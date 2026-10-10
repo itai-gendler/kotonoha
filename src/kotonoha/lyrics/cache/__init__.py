@@ -84,6 +84,14 @@ class LyricsCache:
             return await self.upsert(artifact, mode=LyricsCacheMode.AUTO)
         return None
 
+    async def select(self, track: TrackMetadata, artifact: LyricsArtifact) -> CacheWriteResult:
+        """Atomically remember this playback track's latest explicit lyric choice."""
+        _validate_artifact(artifact)
+        try:
+            return await self._worker.run(self._storage.select, track, artifact)
+        except (OSError, sqlite3.Error) as exc:
+            raise LyricsCacheError("Manual lyrics selection write failed") from exc
+
     async def search(self, query: LyricsCacheQuery) -> tuple[LyricsCacheEntry, ...]:
         """Return matching cache metadata in deterministic recent-use order."""
         try:

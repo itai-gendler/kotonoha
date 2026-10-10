@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
 
@@ -16,6 +17,7 @@ from kotonoha.lyrics.cache import (
     CacheDeleteStatus,
     CacheWriteResult,
     CacheWriteStatus,
+    LyricsCache,
     LyricsCacheEntry,
     LyricsCacheError,
     LyricsCacheHit,
@@ -331,6 +333,43 @@ async def test_manual_cache_selection_is_used_by_ordinary_resolution():
     assert result.document.origin is LyricsOrigin.MANUAL
     assert result.document.cache_state is LyricsCacheState.MANUAL
     assert calls == []
+
+
+async def test_persistent_playback_selection_precedes_matching_and_exact_hint(tmp_path: Path) -> None:
+    """Real cache restoration must bypass conflicting provider metadata without HTTP."""
+    cache = LyricsCache(tmp_path / "lyrics.sqlite3", worker=BlockingCallRunner("test-selection-resolver"))
+    track = TrackMetadata("Playback song (Live)", "Uploader", "Playback album", 200.0)
+    selected = artifact()
+    resolver = LyricsResolver(
+        catalog=catalog_for(
+            {"netease": NetworkLyricsSource(
+                "netease", netease.fetch_artifact, netease.parse_payload,
+                exact_fetch=netease.fetch_artifact_for_song_id,
+            )},
+            FakeGate([]),
+        ),
+        cache=cache,
+    )
+    try:
+        await cache.select(track, selected)
+        ordinary = await resolver.resolve(None, track, ["netease"])
+        hinted = await resolver.resolve_hint(None, track, ["netease"], LyricsHint("netease", "other"))
+        for result in (ordinary, hinted):
+            assert result is not None
+            assert result.document.song_id == selected.provider_song_id
+            assert result.document.origin is LyricsOrigin.MANUAL
+            assert result.document.cache_state is LyricsCacheState.MANUAL
+            assert result.confidence is MatchConfidence.HIGH
+        second_track = replace(track, title=track.title.upper())
+        await cache.select(second_track, replace(selected, provider_song_id="second"))
+        results = await asyncio.gather(
+            resolver.resolve(None, track, ["netease"]),
+            resolver.resolve(None, second_track, ["netease"]),
+        )
+        assert results[0] is not None and results[0].document.song_id == selected.provider_song_id
+        assert results[1] is not None and results[1].document.song_id == "second"
+    finally:
+        await resolver.close()
 
 
 async def test_local_hint_wins_without_using_sources_or_network(monkeypatch, tmp_path: Path):

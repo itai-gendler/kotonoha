@@ -45,8 +45,8 @@ LRC 解析器同时支持普通行级时间标签和 Enhanced LRC 的 inline
 
 自动解析优先级如下：
 
-1. exact hint 路径先查匹配的 `MANUAL` cache，再查 hint 指定的 source。
-2. 普通 source plan 先查与当前 track 匹配的 `MANUAL` cache。
+1. exact hint 路径先恢复播放 track 的手动绑定（或匹配旧 `MANUAL` 记录），再查 hint 指定的 source。
+2. 普通 source plan 先恢复相同的手动绑定，再评估自动来源。
 3. `prefer_best_lyrics` 开启时按匹配度竞争候选，配置顺序只打破平局；关闭时按配置顺序遇到第一个有效结果即停止。
 4. 普通 cache 只作为所属 provider 的 automatic cache 命中；网络异常不会伪装成 miss。
 
@@ -55,6 +55,16 @@ LRC 解析器同时支持普通行级时间标签和 Enhanced LRC 的 inline
 `LyricsCache` 是异步 facade，`LyricsCacheStorage` 通过注入的 worker 执行同步 SQLite。默认路径为 `$XDG_CACHE_HOME/kotonoha/lyrics.sqlite3`，schema version 为 `1`，默认最多保留 `1000` 条，按 `last_accessed` 淘汰。
 
 记录 key 为 `(provider, provider_song_id)`，保存 provider metadata、payload、时间、mode 和版本信息。损坏或不包含 timed lines 的 payload 会被删除并视为 miss。
+
+手动搜索另外在 `lyric_selections` 中保存原始播放标题、艺术家和时长（四舍五入到 0.1 秒）
+到 provider 记录的绑定。专辑信息不参与绑定，因为播放器可能省略或改变它。元数据字符串精确匹配，版本和艺术家保持区分；搜索框编辑和 provider
+元数据不改变播放身份。再次选择只替换该歌曲的绑定，重启后仍有效。普通解析和 exact hint
+优先恢复绑定，作为用户确认的结果，不再经过自动匹配；自动内容写入不能覆盖绑定。
+删除、清空或丢弃损坏歌词会同时清除绑定。手动记录及其绑定不参与自动 LRU 淘汰，LRU 限制只作用于自动记录；cache-enabled 设置仍控制恢复。
+
+旧数据库自动增加绑定表和 `selection_only` 标记，不丢弃内容。缺少原始播放身份的旧手动记录
+保留启发式恢复，直到删除或重新选择；新绑定过的内容（包括被替换的旧选择）不参与该回退。
+此前因匹配失败无法恢复的选择，需要重新选择一次来建立绑定。
 
 | mode | 含义 |
 | --- | --- |
@@ -68,6 +78,7 @@ LRC 解析器同时支持普通行级时间标签和 Enhanced LRC 的 inline
 | `search(query)` | 按标题、艺术家、专辑、provider 或 song ID 模糊搜索，按最近使用排序 |
 | `get(key)`、`count()` | 读取单条 metadata 或总数 |
 | `upsert(artifact, mode)` | 创建或替换记录 |
+| `select(track, artifact)` | 原子保存内容并替换该播放歌曲的手动绑定 |
 | `update(key, artifact, mode)` | 更新已有记录，供歌词 workflow 使用；管理页面不提供编辑入口 |
 | `delete(key)`、`delete_many(keys)`、`clear()` | 删除单条、批量删除或清空 |
 | `lookup()`、`lookup_manual()` | resolver 专用的内容命中 |
@@ -82,7 +93,7 @@ LRC 解析器同时支持普通行级时间标签和 Enhanced LRC 的 inline
 
 应用候选时：
 
-1. 以 `MANUAL` mode 写入共享 cache。
+1. 原子地以 `MANUAL` mode 写入共享 cache，并绑定到原始播放 track。
 2. 调用 `DisplayCoordinator.apply_manual_artifact()`。
 3. 仅当当前播放 track 仍匹配搜索 track 时替换 document。
 4. 立即按当前播放位置重新投影，播放中无需等待下一首。

@@ -325,13 +325,8 @@ class _FakeLyricsCache:
     async def clear(self) -> None:
         return None
 
-    async def upsert(
-        self,
-        artifact: LyricsArtifact,
-        *,
-        mode: LyricsCacheMode = LyricsCacheMode.MANUAL,
-    ) -> CacheWriteResult:
-        del mode
+    async def select(self, track: TrackMetadata, artifact: LyricsArtifact) -> CacheWriteResult:
+        del track
         return CacheWriteResult(
             LyricsCacheKey(artifact.provider, artifact.provider_song_id),
             CacheWriteStatus.CREATED,

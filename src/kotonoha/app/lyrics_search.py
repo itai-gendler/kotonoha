@@ -10,7 +10,7 @@ from typing import Protocol
 from ..config import Config
 from ..display.models import LyricsDisplayStatus
 from ..lyrics.artifact import LyricsArtifact
-from ..lyrics.cache import CacheWriteResult, LyricsCacheError, LyricsCacheMode
+from ..lyrics.cache import CacheWriteResult, LyricsCacheError
 from ..lyrics.match import TrackMetadata
 from ..lyrics.search import LyricsSearchError, LyricsSearchPort, LyricsSearchQuery, LyricsSearchResult
 from .intents import SearchLyrics, SelectLyrics
@@ -23,13 +23,8 @@ logger = logging.getLogger(__name__)
 class LyricsCacheWritePort(Protocol):
     """Explicit cache-write capability owned by manual lyric selection."""
 
-    async def upsert(
-        self,
-        artifact: LyricsArtifact,
-        *,
-        mode: LyricsCacheMode = LyricsCacheMode.MANUAL,
-    ) -> CacheWriteResult:
-        """Create or replace one validated lyric artifact."""
+    async def select(self, track: TrackMetadata, artifact: LyricsArtifact) -> CacheWriteResult:
+        """Persist content and bind it to the original playback track atomically."""
         ...
 
 
@@ -77,7 +72,7 @@ class LyricsSearchController:
             dialog.activateWindow()
             return
         self._sources = tuple(config.lyrics_sources)
-        self._current_track = query.track_metadata()
+        self._current_track = TrackMetadata(query.title, query.artist, query.album, query.duration_s)
         self._results = ()
         dialog = self._factory.create(config, query, status)
         dialog.intent_requested.connect(self._handle_intent)
@@ -221,7 +216,7 @@ class LyricsSearchController:
         current_track: TrackMetadata,
     ) -> None:
         """Write and immediately display the selected artifact as a manual result."""
-        write_result = await self._cache.upsert(result.artifact, mode=LyricsCacheMode.MANUAL)
+        write_result = await self._cache.select(current_track, result.artifact)
         displayed = self._on_applied(result, current_track)
         if self._dialog is dialog:
             dialog.set_current_status(self._status_provider())

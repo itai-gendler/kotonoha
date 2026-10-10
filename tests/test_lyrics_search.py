@@ -10,7 +10,7 @@ from kotonoha.app.lyrics_search import LyricsSearchController
 from kotonoha.config import Config
 from kotonoha.display.models import LyricsDisplayStatus
 from kotonoha.lyrics.artifact import LyricsArtifact
-from kotonoha.lyrics.cache import CacheWriteResult, CacheWriteStatus, LyricsCacheKey, LyricsCacheMode
+from kotonoha.lyrics.cache import CacheWriteResult, CacheWriteStatus, LyricsCacheKey
 from kotonoha.lyrics.http import LyricsResponse, LyricsSession
 from kotonoha.lyrics.match import MatchConfidence, TrackMetadata
 from kotonoha.lyrics.models import LyricLine, LyricsCacheState, LyricsOrigin
@@ -247,15 +247,10 @@ def _ordinary_window_factory(host):
 
 class _Cache:
     def __init__(self) -> None:
-        self.writes: list[tuple[LyricsArtifact, LyricsCacheMode]] = []
+        self.writes: list[tuple[LyricsArtifact, TrackMetadata]] = []
 
-    async def upsert(
-        self,
-        artifact: LyricsArtifact,
-        *,
-        mode: LyricsCacheMode = LyricsCacheMode.MANUAL,
-    ) -> CacheWriteResult:
-        self.writes.append((artifact, mode))
+    async def select(self, track: TrackMetadata, artifact: LyricsArtifact) -> CacheWriteResult:
+        self.writes.append((artifact, track))
         status = CacheWriteStatus.CREATED if len(self.writes) == 1 else CacheWriteStatus.UPDATED
         return CacheWriteResult(LyricsCacheKey(artifact.provider, artifact.provider_song_id), status)
 
@@ -321,11 +316,12 @@ async def test_search_controller_reapplies_candidates_and_refreshes_manual_statu
         on_applied=apply,
         status_provider=lambda: active_status,
     )
-    query = LyricsSearchQuery("Song", "Artist", "Album", 180.0)
+    query = LyricsSearchQuery(" Song ", "Artist", "Album", 180.0)
     controller.open(Config(), query, active_status)
     assert factory.status is active_status
 
-    controller.search(query)
+    edited_query = LyricsSearchQuery("Edited title", "Edited artist", "Edited album", 180.0)
+    controller.search(edited_query)
     await asyncio.wait_for(factory.dialog.search_finished.wait(), timeout=1.0)
     controller.select(first)
     await asyncio.wait_for(factory.dialog.apply_finished.wait(), timeout=1.0)
@@ -336,8 +332,11 @@ async def test_search_controller_reapplies_candidates_and_refreshes_manual_statu
     controller.select(second)
     await asyncio.wait_for(factory.dialog.apply_finished.wait(), timeout=1.0)
     assert factory.dialog.status.lyrics_source_id == "lrclib"
-    assert [artifact.provider for artifact, _mode in cache.writes] == ["netease", "lrclib"]
-    assert all(mode is LyricsCacheMode.MANUAL for _artifact_value, mode in cache.writes)
+    assert [artifact.provider for artifact, _track in cache.writes] == ["netease", "lrclib"]
+    assert all(
+        track == TrackMetadata(query.title, query.artist, query.album, query.duration_s)
+        for _artifact_value, track in cache.writes
+    )
     assert [result.status for result, displayed in factory.dialog.apply_results] == [
         CacheWriteStatus.CREATED,
         CacheWriteStatus.UPDATED,

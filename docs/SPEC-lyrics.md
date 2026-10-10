@@ -48,8 +48,8 @@ are cancelled, and stale results cannot update the active display.
 
 Automatic resolution follows this order:
 
-1. An exact-hint path checks a matching `MANUAL` cache entry, then the source named by the hint.
-2. A normal source plan checks `MANUAL` cache entries that match the current track.
+1. An exact-hint path restores the playback track's manual binding (or a matching legacy `MANUAL` entry), then checks the source named by the hint.
+2. A normal source plan restores the same manual binding before evaluating automatic sources.
 3. With `prefer_best_lyrics` enabled, candidates compete by match confidence and configured order breaks ties. With it disabled, the first valid result in configured order wins.
 4. An `AUTO` cache entry is considered only for its owning provider. A network failure is not treated as a cache miss.
 
@@ -65,6 +65,24 @@ metadata, the original payload, timestamps, selection mode, and version data.
 Corrupt payloads and payloads without timed lines are deleted and treated as
 cache misses.
 
+Manual search also stores a separate `lyric_selections` binding from the original
+playback title, artist, and duration (rounded to 0.1 seconds) to the provider
+record. Album metadata is excluded because players may omit or change it. Metadata strings are exact: versions and artists remain distinct. Edited
+search fields and provider metadata do not change the playback identity. A new
+choice replaces only that track's binding, including after a restart. Ordinary
+resolution and exact hints restore the binding as a user-confirmed result without
+automatic matching; automatic content writes cannot overwrite the binding.
+Deleting, clearing, or rejecting a corrupt artifact removes its bindings. Manual
+records and their bindings are exempt from automatic LRU eviction; the LRU limit
+applies only to automatic records.
+The cache-enabled setting still controls restoration.
+
+Existing databases gain the binding table and a `selection_only` marker without
+discarding content. Legacy manual entries without a recorded playback identity
+retain heuristic restoration until deleted or reselected. Newly bound content,
+including superseded choices, never participates in that legacy fallback. Old
+choices rejected by matching need to be selected once again to create a binding.
+
 | Mode | Meaning |
 | --- | --- |
 | `AUTO` (`auto`) | Written by high-confidence automatic resolution and used only by its provider |
@@ -77,6 +95,7 @@ The cache facade exposes these operations:
 | `search(query)` | Fuzzy metadata search over title, artist, album, provider, and song id; ordered by recent use |
 | `get(key)`, `count()` | Read one metadata record or the total count |
 | `upsert(artifact, mode)` | Create or replace a record |
+| `select(track, artifact)` | Atomically persist content and replace the playback track's manual binding |
 | `update(key, artifact, mode)` | Update an existing record for lyric workflows; not exposed as an edit action in cache management |
 | `delete(key)`, `delete_many(keys)`, `clear()` | Delete one record, several records, or all records |
 | `lookup()`, `lookup_manual()` | Content lookup used by the resolver |
@@ -99,7 +118,7 @@ return a typed result containing the source and reason.
 
 Applying a result follows this sequence:
 
-1. Write the artifact to the shared cache with `MANUAL` mode.
+1. Atomically write the artifact with `MANUAL` mode and bind it to the original playback track.
 2. Call `DisplayCoordinator.apply_manual_artifact()`.
 3. Replace the document only if the active track still matches the track used for the search.
 4. Re-project at the current playback position immediately; playback does not need to reach the next track.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sqlite3
 import time
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS lyrics (
     artist TEXT NOT NULL,
     album TEXT NOT NULL,
     mode TEXT NOT NULL DEFAULT 'auto',
+    selection_only INTEGER NOT NULL DEFAULT 0,
     duration_s REAL,
     payload_json TEXT NOT NULL,
     fetched_at REAL NOT NULL,
@@ -50,6 +52,13 @@ CREATE TABLE IF NOT EXISTS lyrics (
 );
 CREATE INDEX IF NOT EXISTS lyrics_provider_access
     ON lyrics(provider, last_accessed DESC);
+CREATE TABLE IF NOT EXISTS lyric_selections (
+    track_key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    provider_song_id TEXT NOT NULL,
+    FOREIGN KEY (provider, provider_song_id)
+        REFERENCES lyrics(provider, provider_song_id) ON DELETE CASCADE
+);
 """
 
 
@@ -82,7 +91,7 @@ class LyricsCacheStorage:
                     matches.append((evidence, row))
             matches.sort(key=lambda item: self._match_sort_key(item[0]), reverse=True)
             for evidence, row in matches:
-                hit = self._read_hit(connection, row, evidence, parser, LyricsCacheMode.AUTO)
+                hit = self._read_hit(connection, row, evidence.confidence, parser, LyricsCacheMode.AUTO)
                 if hit is not None:
                     return hit
             return None
@@ -92,11 +101,27 @@ class LyricsCacheStorage:
         track: TrackMetadata,
         parsers: Mapping[str, PayloadParser],
     ) -> LyricsCacheHit | None:
-        """Return the best matching manual selection across known providers."""
+        """Restore a playback binding first, then match unbound legacy manual rows."""
         with self._connect() as connection:
+            selection_key = _selection_key(track)
+            selected = connection.execute(
+                "SELECT lyrics.* FROM lyric_selections JOIN lyrics USING (provider, provider_song_id) "
+                "WHERE track_key IN (?, ?) AND schema_version = ? AND normalizer_version = ? "
+                "ORDER BY track_key = ? DESC",
+                (selection_key, _legacy_selection_key(track), CACHE_SCHEMA_VERSION, NORMALIZER_VERSION, selection_key),
+            ).fetchone()
+            if selected is not None:
+                parser = parsers.get(selected["provider"])
+                if parser is None:
+                    return None
+                return self._read_hit(
+                    connection, selected, MatchConfidence.HIGH, parser, LyricsCacheMode.MANUAL,
+                )
+            # TODO: Remove heuristic restoration when unbound legacy MANUAL rows have
+            # been deleted or reselected; their original playback identity was not stored.
             rows = connection.execute(
                 "SELECT * FROM lyrics "
-                "WHERE mode = ? AND schema_version = ? AND normalizer_version = ? "
+                "WHERE mode = ? AND schema_version = ? AND normalizer_version = ? AND selection_only = 0 "
                 "ORDER BY last_accessed DESC, provider ASC, provider_song_id ASC",
                 (LyricsCacheMode.MANUAL.value, CACHE_SCHEMA_VERSION, NORMALIZER_VERSION),
             ).fetchall()
@@ -111,7 +136,7 @@ class LyricsCacheStorage:
 
             matches.sort(key=lambda item: self._manual_sort_key(item[0], item[1]), reverse=True)
             for evidence, row, parser in matches:
-                hit = self._read_hit(connection, row, evidence, parser, LyricsCacheMode.MANUAL)
+                hit = self._read_hit(connection, row, evidence.confidence, parser, LyricsCacheMode.MANUAL)
                 if hit is not None:
                     return hit
             return None
@@ -149,6 +174,20 @@ class LyricsCacheStorage:
 
     def upsert(self, artifact: LyricsArtifact, mode: LyricsCacheMode) -> CacheWriteResult:
         """Create or replace one validated artifact and prune oldest rows."""
+        return self._write(artifact, mode, None)
+
+    def select(self, track: TrackMetadata, artifact: LyricsArtifact) -> CacheWriteResult:
+        """Atomically persist the artifact and replace this playback track's choice."""
+        return self._write(artifact, LyricsCacheMode.MANUAL, _selection_key(track))
+
+    def _write(
+        self, artifact: LyricsArtifact, mode: LyricsCacheMode, track_key: str | None,
+    ) -> CacheWriteResult:
+        """Keep content, selection replacement, and eviction in one transaction.
+
+        The permanent selection_only marker prevents superseded bound content
+        from being mistaken for a legacy manual choice after its binding changes.
+        """
         now = time.time()
         payload_json = json.dumps(artifact.payload, ensure_ascii=False, separators=(",", ":"))
         key = LyricsCacheKey(artifact.provider, artifact.provider_song_id)
@@ -160,13 +199,14 @@ class LyricsCacheStorage:
             connection.execute(
                 "INSERT INTO lyrics ("
                 "provider, provider_song_id, title, artist, album, mode, duration_s, payload_json, "
-                "fetched_at, last_accessed, schema_version, normalizer_version"
-                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "fetched_at, last_accessed, schema_version, normalizer_version, selection_only"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(provider, provider_song_id) DO UPDATE SET "
                 "title = excluded.title, artist = excluded.artist, album = excluded.album, mode = excluded.mode, "
                 "duration_s = excluded.duration_s, payload_json = excluded.payload_json, "
                 "fetched_at = excluded.fetched_at, last_accessed = excluded.last_accessed, "
-                "schema_version = excluded.schema_version, normalizer_version = excluded.normalizer_version",
+                "schema_version = excluded.schema_version, normalizer_version = excluded.normalizer_version, "
+                "selection_only = MAX(lyrics.selection_only, excluded.selection_only)",
                 (
                     artifact.provider,
                     artifact.provider_song_id,
@@ -180,12 +220,21 @@ class LyricsCacheStorage:
                     now,
                     CACHE_SCHEMA_VERSION,
                     NORMALIZER_VERSION,
+                    int(track_key is not None),
                 ),
             )
+            if track_key is not None:
+                connection.execute(
+                    "INSERT INTO lyric_selections (track_key, provider, provider_song_id) VALUES (?, ?, ?) "
+                    "ON CONFLICT(track_key) DO UPDATE SET provider = excluded.provider, "
+                    "provider_song_id = excluded.provider_song_id",
+                    (track_key, artifact.provider, artifact.provider_song_id),
+                )
             connection.execute(
-                "DELETE FROM lyrics WHERE rowid IN ("
-                "SELECT rowid FROM lyrics ORDER BY last_accessed DESC LIMIT -1 OFFSET ?)",
-                (self._max_entries,),
+                "DELETE FROM lyrics WHERE selection_only = 0 AND mode = ? AND rowid IN ("
+                "SELECT rowid FROM lyrics WHERE selection_only = 0 AND mode = ? "
+                "ORDER BY last_accessed DESC LIMIT -1 OFFSET ?)",
+                (LyricsCacheMode.AUTO.value, LyricsCacheMode.AUTO.value, self._max_entries),
             )
         status = CacheWriteStatus.UPDATED if existed else CacheWriteStatus.CREATED
         return CacheWriteResult(key, status)
@@ -255,16 +304,19 @@ class LyricsCacheStorage:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self._path, timeout=3.0)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         connection.executescript(_SCHEMA)
-        self._ensure_mode_column(connection)
+        self._ensure_columns(connection)
         return connection
 
     @staticmethod
-    def _ensure_mode_column(connection: sqlite3.Connection) -> None:
+    def _ensure_columns(connection: sqlite3.Connection) -> None:
         """Add metadata introduced after the first cache schema without losing rows."""
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(lyrics)")}
         if "mode" not in columns:
             connection.execute("ALTER TABLE lyrics ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'")
+        if "selection_only" not in columns:
+            connection.execute("ALTER TABLE lyrics ADD COLUMN selection_only INTEGER NOT NULL DEFAULT 0")
 
     @staticmethod
     def _match_row(row: sqlite3.Row, track: TrackMetadata) -> MatchEvidence:
@@ -282,7 +334,7 @@ class LyricsCacheStorage:
         self,
         connection: sqlite3.Connection,
         row: sqlite3.Row,
-        evidence: MatchEvidence,
+        confidence: MatchConfidence,
         parser: PayloadParser,
         mode: LyricsCacheMode,
     ) -> LyricsCacheHit | None:
@@ -319,7 +371,7 @@ class LyricsCacheStorage:
                 duration_s=row["duration_s"],
                 payload=payload,
                 lines=lines,
-                confidence=evidence.confidence,
+                confidence=confidence,
             ),
             mode=mode,
         )
@@ -381,6 +433,34 @@ class LyricsCacheStorage:
             last_accessed=float(last_accessed),
             mode=mode,
         )
+
+
+def _selection_key(track: TrackMetadata) -> str:
+    """Serialize title, artist, and rounded duration as the playback identity.
+
+    Album metadata is deliberately excluded because players frequently omit or alter
+    it while the same track remains active.
+    """
+    if not all(isinstance(value, str) for value in (track.title, track.artist, track.album)):
+        raise TypeError("selection metadata must contain strings")
+    duration = track.duration_s
+    if duration is not None and (not math.isfinite(duration) or duration < 0):
+        raise ValueError("selection duration must be finite and nonnegative")
+    normalized_duration = None if duration is None else float(round(duration, 1))
+    return json.dumps(
+        (track.title, track.artist, normalized_duration),
+        ensure_ascii=False, separators=(",", ":"),
+    )
+
+
+def _legacy_selection_key(track: TrackMetadata) -> str:
+    """Return the pre-album-removal key for one-time compatibility lookup."""
+    duration = track.duration_s
+    normalized_duration = None if duration is None else float(round(duration, 1))
+    return json.dumps(
+        (track.title, track.artist, track.album, normalized_duration),
+        ensure_ascii=False, separators=(",", ":"),
+    )
 
 
 def _entry_matches(entry: LyricsCacheEntry, keyword: str) -> bool:
