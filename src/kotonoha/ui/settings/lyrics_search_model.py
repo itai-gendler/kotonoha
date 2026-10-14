@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
 from PyQt6.QtGui import QColor
 
+from ...display.models import LyricsDisplayStatus
 from ...lyrics.artifact import LyricsArtifact
 from ...lyrics.match import MatchConfidence
 from ...lyrics.search import LyricsSearchResult, LyricsSearchUnavailable, LyricsTiming, LyricsVersion
@@ -53,6 +54,21 @@ class LyricsSearchTableModel(QAbstractTableModel):
         # colour of its own and the same rating reads on either surface.
         self._confidence_colours = confidence_colours
         self._results: tuple[LyricsSearchResult, ...] = ()
+        # Identity of the displayed document, independent of table selection.
+        self._current_status: LyricsDisplayStatus = LyricsDisplayStatus()
+
+    def set_current_status(self, status: LyricsDisplayStatus) -> None:
+        """Refresh the in-use marker from the actual displayed document."""
+        self._current_status = status
+        if self._results:
+            self.dataChanged.emit(self.index(0, 0), self.index(len(self._results) - 1, 0))
+
+    def is_current(self, result: LyricsSearchResult) -> bool:
+        """Match a candidate against the displayed provider-scoped song identity."""
+        return (
+            self._current_status.lyrics_source_id == result.artifact.provider
+            and self._current_status.lyrics_song_id == result.artifact.provider_song_id
+        )
 
     def _liftable_labels(self, artifact: LyricsArtifact) -> tuple[str, ...]:
         """Return the qualifiers short enough to stand beside the title as marks."""
@@ -100,8 +116,11 @@ class LyricsSearchTableModel(QAbstractTableModel):
         result = self._results[index.row()]
         artifact = result.artifact
         if role == Qt.ItemDataRole.DisplayRole:
+            provider = self._translator.text(f"src.{artifact.provider}")
+            if self.is_current(result):
+                provider = f"{provider} · ✓ {self._translator.text('search.in_use')}"
             values = (
-                self._translator.text(f"src.{artifact.provider}"),
+                provider,
                 self._shown_title(artifact),
                 readable(artifact.artist),
                 readable(artifact.album),
@@ -116,6 +135,9 @@ class LyricsSearchTableModel(QAbstractTableModel):
         if role == VERSION_LABEL_ROLE:
             return self._liftable_labels(artifact) if index.column() == _TITLE_COLUMN else ()
         if role == SORT_ROLE:
+            if index.column() == 0:
+                # The in-use marker is feedback, not provider sort metadata.
+                return self._translator.text(f"src.{artifact.provider}").casefold()
             if index.column() == _DURATION_COLUMN:
                 # An unknown length sorts below every known one rather than as zero.
                 return artifact.duration_s if artifact.duration_s is not None else -1.0

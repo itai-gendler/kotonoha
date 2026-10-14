@@ -23,6 +23,7 @@ from ...display.models import LyricsDisplayStatus
 from ...icons import clear_icon, heading_icon, search_icon
 from ...lyrics.cache import CacheWriteResult, CacheWriteStatus
 from ...lyrics.match import MatchConfidence
+from ...lyrics.models import LyricsCacheState
 from ...lyrics.search import LyricsSearchQuery, LyricsSearchResponse, LyricsSearchResult
 from ...platform import OverlayPlatformFactory
 from ...strings import Translator
@@ -72,6 +73,7 @@ class LyricsSearchDialog(ThemedSettingsDialog):
 
         self._model = LyricsSearchTableModel(
 self._translator, self._confidence_colours())
+        self._model.set_current_status(self._current_status)
         # Every query field, so a theme change can redraw their clear marks.
         self._query_edits: list[ClearableLineEdit] = []
         # A player that reports only a page title knows less about the track than
@@ -139,6 +141,11 @@ self._translator, self._confidence_colours())
 
         self._status = ElidingLabel()
         self._status.setObjectName("searchStatus")
+        # Persistent completion feedback, separate from transient search counts.
+        self._apply_feedback: QLabel = QLabel()
+        self._apply_feedback.setObjectName("searchApplyFeedback")
+        self._apply_feedback.setWordWrap(True)
+        self._apply_feedback.hide()
         self._apply_button = QPushButton(self._translator.text("btn.apply_lyrics"))
         self._apply_button.setObjectName("applyButton")
         self._apply_button.clicked.connect(self._request_apply)
@@ -184,6 +191,7 @@ self._translator, self._confidence_colours())
         table_tools.addWidget(self._high_only)
         layout.addLayout(table_tools)
         layout.addWidget(self._table, 1)
+        layout.addWidget(self._apply_feedback)
         layout.addLayout(footer)
         # The marks this window rasterizes from the palette are painted on one
         # path, so opening in a theme and moving to another cannot disagree.
@@ -362,6 +370,8 @@ self._translator, self._confidence_colours())
         """Refresh the active lyric source after a selection is applied."""
         self._current_status = status
         self._status_band.set_status(status)
+        self._model.set_current_status(status)
+        self._update_action_state()
 
     def set_busy(self, busy: bool) -> None:
         """Disable query and selection commands while an owned task is active."""
@@ -372,6 +382,7 @@ self._translator, self._confidence_colours())
         self._table.setEnabled(not busy)
         self._update_action_state()
         if busy:
+            self._apply_feedback.hide()
             self._show_status(self._translator.text("search.loading"))
 
     def show_error(self, message: str) -> None:
@@ -381,6 +392,7 @@ self._translator, self._confidence_colours())
         caller outside this vocabulary still reports something rather than nothing.
         """
         self._status.setObjectName("searchError")
+        self._apply_feedback.hide()
         self._status.setText(self._translator.text(message))
         self._refresh_status_style()
 
@@ -389,8 +401,10 @@ self._translator, self._confidence_colours())
         key = "search.apply.created" if result.status is CacheWriteStatus.CREATED else "search.apply.updated"
         message = self._translator.text(key)
         if not displayed:
-            message = f"{message} {self._translator.text('search.apply.next_track')}"
-        self._show_status(message)
+            message = self._translator.text("search.apply.saved")
+        self._apply_feedback.setText(f"✓ {message}")
+        self._apply_feedback.show()
+        self._show_status("")
 
     def _request_search(self) -> None:
         """Publish one editable provider-search query."""
@@ -415,7 +429,7 @@ self._translator, self._confidence_colours())
         if not rows:
             return
         result = self._sorted.result_at(rows[0].row())
-        if result is not None:
+        if result is not None and self._apply_button.isEnabled():
             self.intent_requested.emit(SelectLyrics(result))
 
     def _request_apply_for_index(self, index: QModelIndex) -> None:
@@ -427,8 +441,15 @@ self._translator, self._confidence_colours())
     def _update_action_state(self, *_args: object) -> None:
         """Keep the apply action aligned with current selection and task state."""
         selection_model = self._table.selectionModel()
-        has_selection = selection_model is not None and bool(selection_model.selectedRows())
-        self._apply_button.setEnabled(not self._busy and has_selection)
+        rows = selection_model.selectedRows() if selection_model is not None else []
+        selected = self._sorted.result_at(rows[0].row()) if rows else None
+        applied = (
+            selected is not None and self._model.is_current(selected)
+            and self._current_status.cache_state is LyricsCacheState.MANUAL
+        )
+        key = "search.applied" if applied else "btn.apply_lyrics"
+        self._apply_button.setText(self._translator.text(key))
+        self._apply_button.setEnabled(not self._busy and selected is not None and not applied)
 
     def _show_status(self, message: str, detail: str = "") -> None:
         """Render a status message, keeping any longer explanation in its tooltip."""

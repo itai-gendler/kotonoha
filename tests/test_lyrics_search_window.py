@@ -22,6 +22,51 @@ from kotonoha.ui.settings.lyrics_status import LyricsStatusBand
 
 _COLOURS = {c: "#888888" for c in MatchConfidence}
 
+
+def test_current_lyrics_remain_marked_when_another_candidate_is_selected(qapp) -> None:
+    """Selecting a replacement must not make it look like it is already in use."""
+    dialog = LyricsSearchDialog(Config(), LyricsSearchQuery("Song", "Artist"), translator=Translator("zh-Hans"))
+    current = _result("current", 100.0, MatchConfidence.HIGH)
+    other = _result("other", 100.0, MatchConfidence.HIGH)
+    dialog.set_results(LyricsSearchQuery("Song", "Artist"), LyricsSearchResponse((current, other), ()))
+    dialog.set_current_status(LyricsDisplayStatus(
+        lyrics_source_id="netease", lyrics_song_id="current", cache_state=LyricsCacheState.MANUAL,
+    ))
+    dialog._table.selectRow(0)
+    assert dialog._apply_button.text() == "✓ 已应用"
+    assert not dialog._apply_button.isEnabled()
+    dialog._table.selectRow(1)
+    assert dialog._apply_button.isEnabled()
+    assert "使用中" in str(dialog._model.data(dialog._model.index(0, 0)))
+    assert "使用中" not in str(dialog._model.data(dialog._model.index(1, 0)))
+    # A provider-local song ID cannot identify another provider's result.
+    dialog.set_current_status(LyricsDisplayStatus(lyrics_source_id="qqmusic", lyrics_song_id="current"))
+    assert "使用中" not in str(dialog._model.data(dialog._model.index(0, 0)))
+    dialog._table.selectRow(0)
+    dialog.set_current_status(LyricsDisplayStatus(lyrics_source_id="netease", lyrics_song_id="current"))
+    # Automatically chosen lyrics must still be available for manual pinning.
+    assert dialog._apply_button.isEnabled()
+    dialog.close()
+
+
+@pytest.mark.parametrize("displayed", [True, False])
+def test_apply_feedback_is_prominent_and_reports_whether_display_changed(qapp, displayed: bool) -> None:
+    """A saved result after a track switch must not claim immediate application."""
+    from kotonoha.lyrics.cache import CacheWriteResult, CacheWriteStatus, LyricsCacheKey
+
+    dialog = LyricsSearchDialog(Config(), LyricsSearchQuery("Song", "Artist"), translator=Translator("zh-Hans"))
+    outcome = CacheWriteResult(LyricsCacheKey("netease", "song"), CacheWriteStatus.UPDATED)
+    dialog.show_apply_result(outcome, displayed)
+    feedback = dialog.findChild(QLabel, "searchApplyFeedback")
+    assert feedback is not None
+    assert not feedback.isHidden()
+    assert feedback.wordWrap()
+    assert ("已应用" in feedback.text()) is displayed
+    assert ("下次查询" in feedback.text()) is not displayed
+    dialog.set_busy(True)
+    assert feedback.isHidden()
+    dialog.close()
+
 @pytest.mark.parametrize(
     ("language", "expected"),
     [("zh-Hans", "QQ 音乐, Cider"), ("zh-Hant", "QQ 音樂, Cider"), ("ja", "QQ 音楽, Cider")],

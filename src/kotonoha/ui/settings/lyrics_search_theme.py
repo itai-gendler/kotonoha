@@ -76,5 +76,17 @@ QPushButton#searchButton {{ background: {accent}; color: {palette["GLYPH_ON_ACCE
 QPushButton#searchButton:hover {{ background: {accent}; border-color: {accent}; }}
 QPushButton#applyButton {{ background: {accent}; color: {palette["GLYPH_ON_ACCENT"]}; border-color: {accent}; }}
 QPushButton#applyButton:hover {{ background: {accent}; border-color: {accent}; }}
+QPushButton#applyButton:disabled {{
+background: {palette["FIELD_BG"]}; color: {palette["TEXT_DIM"]}; border-color: {palette["FIELD_BORDER"]};
+}}
 QLabel#searchError {{ color: #E56B6F; }}
+QLabel#searchApplyFeedback {{
+color: {palette["TEXT_STRONG"]};
+background: {card_background};
+border: 1px solid {palette["MATCH_HIGH"]};
+border-left: 4px solid {palette["MATCH_HIGH"]};
+border-radius: 8px;
+padding: 10px 12px;
+font-weight: 600;
+}}
 """

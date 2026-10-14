@@ -275,11 +275,23 @@ SEARCH_STRINGS: Final[dict[str, dict[str, str]]] = {
         "zh-Hant": "歌詞已套用，並儲存為手動。",
         "ja": "歌詞を適用し、手動として保存しました。",
     },
+    "search.in_use": {
+        "en": "In use", "zh-Hans": "使用中", "zh-Hant": "使用中", "ja": "使用中",
+    },
+    "search.applied": {
+        "en": "✓ Applied", "zh-Hans": "✓ 已应用", "zh-Hant": "✓ 已套用", "ja": "✓ 適用済み",
+    },
+    "search.apply.saved": {
+        "en": "Lyrics saved as manual. The playing track changed; they will be used on the next lookup.",
+        "zh-Hans": "歌词已保存为手动。当前播放曲目已切换，将在下次查询时使用。",
+        "zh-Hant": "歌詞已儲存為手動。目前播放曲目已切換，將在下次查詢時使用。",
+        "ja": "歌詞を手動として保存しました。再生中の曲が変わったため、次回の検索時に使用します。",
+    },
     "search.apply.updated": {
-        "en": "Lyrics updated and saved as manual.",
-        "zh-Hans": "歌词已更新，并保存为手动。",
-        "zh-Hant": "歌詞已更新，並儲存為手動。",
-        "ja": "歌詞を更新し、手動として保存しました。",
+        "en": "Lyrics applied and manual selection updated.",
+        "zh-Hans": "歌词已应用，手动选择已更新。",
+        "zh-Hant": "歌詞已套用，手動選擇已更新。",
+        "ja": "歌詞を適用し、手動の選択を更新しました。",
     },
     "search.apply.next_track": {
         "en": "It will be used when this track is looked up again.",
