@@ -42,7 +42,7 @@ def test_cmake_builds_and_installs_native_bridge() -> None:
         (
             "project(kotonoha_native_bridge LANGUAGES C CXX)",
             "find_package(Python3 REQUIRED COMPONENTS Interpreter)",
-            "find_package(Qt6 REQUIRED COMPONENTS Core Gui)",
+            "find_package(Qt6 REQUIRED COMPONENTS Core Gui WaylandClient)",
             "find_package(Qt6GuiPrivate REQUIRED)",
             "find_package(LayerShellQt CONFIG REQUIRED)",
             "pkg_check_modules(WaylandClient REQUIRED IMPORTED_TARGET wayland-client)",

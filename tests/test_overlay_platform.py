@@ -703,3 +703,44 @@ def test_the_platform_learns_which_output_the_overlay_is_on(qapp):
     assert overlay._surface.active_output == Output("HDMI-A-1", WindowRectangle(0, 0, 1920, 1080))
     overlay.deleteLater()
     qapp.processEvents()
+
+
+@pytest.mark.parametrize("passthrough,button,expected", [
+    (False, Qt.MouseButton.RightButton, 1),
+    (True, Qt.MouseButton.RightButton, 0),
+    (False, Qt.MouseButton.LeftButton, 0),
+])
+def test_native_menu_only_requested_on_unlocked_right_press(qapp, passthrough, button, expected):
+    """A real press dispatches once; locked input and dragging never open menus."""
+    from kotonoha.platform.overlay_contracts import WindowMenuRequest
+    from kotonoha.platform.window_platform import DefaultOverlayPlatformFactory
+    from kotonoha.ui.overlay import LyricsOverlay as ProductionOverlay
+
+    class MenuController(UnavailableController):
+        def __init__(self) -> None:
+            super().__init__()
+            self.requests: list[int] = []
+
+        def request_window_menu(self, window_ptr: int) -> WindowMenuRequest:
+            self.requests.append(window_ptr)
+            return WindowMenuRequest.REQUESTED
+
+    bridge = MenuController()
+    overlay = ProductionOverlay(
+        LyricsState(), Config(passthrough=passthrough),
+        platform_factory=DefaultOverlayPlatformFactory(
+            bridge, platform_name="wayland", current_desktop="GNOME",
+        ),
+    )
+    try:
+        overlay.show()
+        event = QMouseEvent(
+            QEvent.Type.MouseButtonPress, QPointF(100, 20), QPointF(100, 20),
+            button, button, Qt.KeyboardModifier.NoModifier,
+        )
+        overlay.mousePressEvent(event)
+        assert len(bridge.requests) == expected
+        assert all(pointer > 0 for pointer in bridge.requests)
+    finally:
+        overlay.shutdown()
+        overlay.close()

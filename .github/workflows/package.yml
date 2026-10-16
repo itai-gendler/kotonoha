@@ -97,7 +97,8 @@ jobs:
             python3-qasync \
             qt6-base-dev \
             qt6-base-private-dev \
-            qt6-wayland-dev
+            qt6-wayland-dev \
+            qt6-wayland-private-dev
       - name: Build DEB
         env:
           DEBEMAIL: locez@locez.com
@@ -188,6 +189,7 @@ jobs:
             qt6-qtbase-devel \
             qt6-qtbase-private-devel \
             qt6-qtwayland-devel \
+            qt6-qtwayland-private-devel \
             rpm-build \
             tar \
             wayland-devel
@@ -289,7 +291,8 @@ jobs:
             pkg-config \
             qt6-base-dev \
             qt6-base-private-dev \
-            qt6-wayland-dev
+            qt6-wayland-dev \
+            qt6-wayland-private-dev
       - name: Build non-pure Linux wheel
         run: |
           set -euo pipefail

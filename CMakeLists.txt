@@ -5,7 +5,8 @@ project(kotonoha_native_bridge LANGUAGES C CXX)
 include(GNUInstallDirs)
 find_package(PkgConfig REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui WaylandClient)
+find_package(Qt6WaylandClientPrivate REQUIRED)
 message(STATUS "koto-layer linking Qt ${Qt6_VERSION}")  # eyeball the Qt<->PyQt6 ABI match
 find_package(Qt6GuiPrivate REQUIRED)
 find_package(LayerShellQt CONFIG REQUIRED)
@@ -102,6 +103,7 @@ target_link_libraries(
     Qt6::Core
     Qt6::Gui
     Qt6::GuiPrivate
+    Qt6::WaylandClientPrivate
     LayerShellQt::Interface
     PkgConfig::WaylandClient
 )

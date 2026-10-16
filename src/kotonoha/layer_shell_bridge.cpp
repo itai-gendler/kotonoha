@@ -17,6 +17,9 @@
 #include <LayerShellQt/Window>
 
 #include <QMargins>
+#include <QtWaylandClient/private/qwaylandwindow_p.h>
+#include <QtWaylandClient/private/qwaylanddisplay_p.h>
+#include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 
 #include <QGuiApplication>
 #include <qpa/qplatformnativeinterface.h>
@@ -152,6 +155,21 @@ namespace {
 
 
 extern "C" {
+    // Call synchronously during a real pointer press. Qt supplies the seat,
+    // serial and surface-local pointer position for xdg_toplevel.show_window_menu.
+    // 1 means request sent, NOT menu displayed: the compositor may ignore it.
+    // 0 means no suitable surface/input, -1 means the shell declined the request.
+    int koto_request_window_menu(QWindow* window) {
+        if (!QGuiApplication::platformName().startsWith("wayland") || !window)
+            return 0;
+        auto* handle = dynamic_cast<QtWaylandClient::QWaylandWindow*>(window->handle());
+        if (!handle || !handle->shellSurface()) return 0;
+        auto* display = handle->display();
+        auto* seat = display->lastInputDevice();
+        if (!seat || display->lastInputWindow() != handle) return 0;
+        return handle->shellSurface()->showWindowMenu(seat) ? 1 : -1;
+    }
+
     // Qt ABI handshake for the ctypes loader (native.py): the version this bridge
     // was built against. The loader refuses a bridge built against a different Qt
     // minor than the running PyQt6 — the bridge links Qt QPA/private API, which

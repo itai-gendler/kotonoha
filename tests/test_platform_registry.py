@@ -9,6 +9,7 @@ from kotonoha.platform.overlay_contracts import (
     Output,
     SurfaceResult,
     SurfaceState,
+    WindowMenuRequest,
     WindowPoint,
     WindowPolicy,
     WindowRectangle,
@@ -27,6 +28,10 @@ class _FakeController:
         self.disabled_reason = None if available else "Fake compositor rejected Layer Shell."
         self.blur_disabled_reason = None if blur_available else "protocol"
         self.calls: list[tuple[str, tuple[int, ...]]] = []
+
+    def request_window_menu(self, window_ptr: int) -> WindowMenuRequest:
+        self.calls.append(("window_menu", (window_ptr,)))
+        return WindowMenuRequest.REQUESTED
 
     def make_overlay(self, window_ptr: int) -> None:
         self.calls.append(("make_overlay", (window_ptr,)))
@@ -940,3 +945,27 @@ def test_a_deleted_widget_reports_no_handle_rather_than_raising() -> None:
     sip.delete(widget)
 
     assert host.native_window_pointer() is None
+
+
+def test_window_menu_port_tracks_surface_role_and_lifecycle():
+    """Only ordinary Wayland surfaces dispatch menus, and never after release."""
+    from kotonoha.platform.overlay_contracts import WindowMenuRequest
+
+    for platform_name, layer_shell, supported in [
+        ("wayland", False, True), ("wayland", True, False), ("xcb", False, False),
+    ]:
+        bridge = _FakeController(layer_shell)
+        factory = DefaultOverlayPlatformFactory(
+            bridge, platform_name=platform_name, current_desktop="GNOME", niri_socket_present=False,
+        )
+        platform = factory(_FakeHost())
+        menu = platform.window_menu
+        assert (menu is not None) is supported
+        if menu is not None:
+            assert menu.request_window_menu() is WindowMenuRequest.REQUESTED
+            assert menu.request_window_menu() is WindowMenuRequest.REQUESTED
+            assert len(bridge.calls) == 2
+            platform.surface.release_surface()
+            assert menu.request_window_menu() is WindowMenuRequest.REJECTED
+            platform.surface.close()
+            assert menu.request_window_menu() is WindowMenuRequest.REJECTED

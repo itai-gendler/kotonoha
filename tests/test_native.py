@@ -294,3 +294,36 @@ def test_the_live_session_opt_in_actually_reaches_the_session(tmp_path):
 
     assert without == ["False", "offscreen"], "an ambient Wayland session decided the platform"
     assert with_optin == ["True", "wayland"], "the opt-in did not reach the session"
+
+
+@pytest.mark.parametrize("code,expected", [
+    (1, "REQUESTED"), (0, "UNAVAILABLE"), (-1, "REJECTED"),
+])
+def test_menu_dispatch_does_not_require_layer_shell(stub_load, code, expected):
+    """Mutter can receive a menu request without supporting Layer Shell."""
+    from kotonoha.platform.overlay_contracts import WindowMenuRequest
+
+    class MenuLib(_FakeLib):
+        def __init__(self) -> None:
+            super().__init__(has_layer_shell=False)
+            self.pointers: list[int] = []
+
+        def koto_request_window_menu(self, pointer):
+            self.pointers.append(pointer.value)
+            return code
+
+    lib = MenuLib()
+    stub_load(lib)
+    controller = LayerShellController("/pkg", "wayland", "GNOME")
+    assert controller.available is False
+    assert controller.request_window_menu(123) is WindowMenuRequest[expected]
+    assert lib.pointers == [123]
+
+
+def test_menu_unavailable_with_older_or_missing_bridge(stub_load):
+    """A pre-menu bridge and a non-Wayland session cannot dispatch requests."""
+    from kotonoha.platform.overlay_contracts import WindowMenuRequest
+
+    stub_load(_FakeLib(has_layer_shell=False))
+    assert LayerShellController("/pkg", "wayland", "GNOME").request_window_menu(123) is WindowMenuRequest.UNAVAILABLE
+    assert LayerShellController("/pkg", "xcb", "GNOME").request_window_menu(123) is WindowMenuRequest.UNAVAILABLE

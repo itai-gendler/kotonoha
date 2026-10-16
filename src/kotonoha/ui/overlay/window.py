@@ -35,7 +35,7 @@ from ...display.models import DisplayFrame
 from ...display.offsets import EMPTY_TRACK_OFFSETS, TrackOffsetKey, TrackOffsetReader
 from ...lyrics.match import TrackMetadata
 from ...platform import OverlayPlatformFactory, QtWindowHost
-from ...platform.overlay_contracts import DragMode, SurfacePort, SurfaceResult
+from ...platform.overlay_contracts import DragMode, SurfacePort, SurfaceResult, WindowMenuRequest
 from ...strings import Translator
 from .chrome import OverlayChromeController
 from .content import OverlayContentController
@@ -537,6 +537,18 @@ class LyricsOverlay(QWidget):
     # conversion, so persistence never reconstructs movement from a second source.
 
     def mousePressEvent(self, a0: QMouseEvent | None) -> None:
+        if a0 is not None and not self._passthrough and a0.button() == Qt.MouseButton.RightButton:
+            menu = self._surface.platform.window_menu
+            if menu is not None:
+                # Keep the request in the press handler: Wayland needs this
+                # gesture's serial, which a deferred context-menu event may lose.
+                result = menu.request_window_menu()
+                if result is WindowMenuRequest.REQUESTED:
+                    logger.info("System window menu: %s", result.value)
+                else:
+                    logger.warning("System window menu: %s", result.value)
+                a0.accept()
+                return
         if a0 is not None and not self._passthrough and a0.button() == Qt.MouseButton.LeftButton:
             local = a0.position().toPoint()
             global_position = a0.globalPosition().toPoint()

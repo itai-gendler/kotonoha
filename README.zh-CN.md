@@ -88,10 +88,10 @@ Release 会使用 Python 3.13 或更高版本进行检查。Python 3.11 和 3.12
 sudo pacman -S cmake qt6-base qt6-wayland layer-shell-qt
 
 # Fedora
-sudo dnf install cmake qt6-qtbase-devel layer-shell-qt-devel wayland-devel gcc-c++
+sudo dnf install cmake qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtwayland-devel qt6-qtwayland-private-devel layer-shell-qt-devel wayland-devel gcc-c++
 
 # Debian/Ubuntu
-sudo apt install cmake build-essential pkg-config qt6-base-dev qt6-base-private-dev qt6-wayland-dev libwayland-dev liblayershellqtinterface-dev
+sudo apt install cmake build-essential pkg-config qt6-base-dev qt6-base-private-dev qt6-wayland-dev qt6-wayland-private-dev libwayland-dev liblayershellqtinterface-dev
 
 # Gentoo
 sudo emerge -a dev-build/cmake kde-plasma/layer-shell-qt dev-qt/qtwayland
@@ -108,7 +108,8 @@ uv run kotonoha
 
 ## 使用条件
 
-- 如果要悬浮在全屏窗口上方，需要实现 `wlr-layer-shell` 的 compositor，例如 KDE/KWin 或基于 wlroots 的 compositor。GNOME/Mutter 会回退到普通的置顶窗口。
+- 如果要悬浮在全屏窗口上方，需要实现 `wlr-layer-shell` 的 compositor，例如 KDE/KWin 或基于 wlroots 的 compositor。GNOME/Mutter 会回退到普通窗口，无法自动置顶。
+- 在 GNOME/Mutter Wayland 中，右键解锁后的歌词可请求系统窗口菜单，再选择 **总在最前 / Always on Top**；窗口获得焦点时也可按 `Alt+Space`。菜单及堆叠由 Mutter 决定，不保证覆盖全屏应用或在窗口表面重建后保留置顶状态。
 - 在 GNOME/Mutter Wayland 中，解锁后的悬浮窗会使用 compositor 的系统移动手势，因此不会发送客户端窗口移动请求，也不会保存客户端无法确认的坐标。
 - 毛玻璃需要 `ext-background-effect-v1`（KWin 6.7+、Mutter）或旧版 `org_kde_kwin_blur`（Plasma 6.6 及更早版本）。两者都不可用时，面板仍保持半透明但不会模糊，毛玻璃选项会被禁用。
 - 浏览器播放器可以通过 [Plasma Browser Integration](https://github.com/KDE/plasma-browser-integration) 和/或 `playerctld` 提供 MPRIS。

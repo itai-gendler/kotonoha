@@ -20,9 +20,9 @@ print_help_and_exit() {
     log_error "$1"
     echo ""
     echo -e "${YELLOW}Missing dependencies? Please install them:${NC}"
-    echo "  - Debian/Ubuntu: sudo apt install qt6-base-dev qt6-base-private-dev libwayland-dev liblayershellqt-dev build-essential"
+    echo "  - Debian/Ubuntu: sudo apt install qt6-base-dev qt6-base-private-dev qt6-wayland-dev qt6-wayland-private-dev libwayland-dev liblayershellqt-dev build-essential"
     echo "  - Arch Linux: sudo pacman -S qt6-base qt6-wayland layer-shell-qt"
-    echo "  - Fedora: sudo dnf install qt6-qtbase-devel layer-shell-qt-devel wayland-devel gcc-c++"
+    echo "  - Fedora: sudo dnf install qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtwayland-devel qt6-qtwayland-private-devel layer-shell-qt-devel wayland-devel gcc-c++"
     echo "  - Gentoo: sudo emerge -a kde-plasma/layer-shell-qt dev-qt/qtwayland"
     echo ""
     exit 1
@@ -60,8 +60,8 @@ if ! pkg-config --exists wayland-client; then
 fi
 
 # 4. Check for Qt6 Core/Gui
-if ! pkg-config --exists Qt6Core Qt6Gui; then
-    print_help_and_exit "Qt6 Core/Gui development headers not found."
+if ! pkg-config --exists Qt6Core Qt6Gui Qt6WaylandClient; then
+    print_help_and_exit "Qt6 Core/Gui/WaylandClient development headers not found."
 fi
 
 # 5. Check for LayerShellQt
@@ -98,6 +98,14 @@ if [ ! -d "$QT_PRIVATE_HEADERS" ]; then
     fi
 fi
 
+# Native menu requests use Qt Wayland's shell and current input-device API.
+# Private headers must match the same Qt build used by the application at runtime.
+QT_WAYLAND_PRIVATE="$QT_INSTALL_HEADERS/QtWaylandClient/$QT_VERSION"
+QT_CORE_PRIVATE="$QT_INSTALL_HEADERS/QtCore/$QT_VERSION"
+if [ ! -f "$QT_WAYLAND_PRIVATE/QtWaylandClient/private/qwaylandshellsurface_p.h" ]; then
+    print_help_and_exit "Qt Wayland private headers not found. Missing qt6-wayland-private-dev?"
+fi
+
 # --- Compilation ---
 log_info "Compiling..."
 
@@ -110,9 +118,14 @@ fi
 
 g++ -fPIC -shared -o "$OUTPUT_FILE" "$SOURCE_FILE" \
     $LINK_FLAGS \
-    $(pkg-config --cflags --libs Qt6Gui Qt6Core wayland-client) \
+    $(pkg-config --cflags --libs Qt6Gui Qt6Core Qt6WaylandClient wayland-client) \
     $LAYERSHELL_CFLAGS $LAYERSHELL_LIBS \
-    -I"$QT_PRIVATE_HEADERS" \
+    -I"$QT_PRIVATE_HEADERS" -I"$QT_PRIVATE_HEADERS/.." \
+    -I"$QT_CORE_PRIVATE" -I"$QT_CORE_PRIVATE/QtCore" \
+    -I"$QT_WAYLAND_PRIVATE" -I"$QT_WAYLAND_PRIVATE/QtWaylandClient" \
+    -I"$QT_INSTALL_HEADERS/QtWaylandGlobal" \
+    -I"$QT_INSTALL_HEADERS/QtWaylandGlobal/$QT_VERSION" \
+    -I"$QT_INSTALL_HEADERS/QtWaylandGlobal/$QT_VERSION/QtWaylandGlobal" \
     || print_help_and_exit "Compilation failed."
 
 log_success "Build complete: $OUTPUT_FILE"

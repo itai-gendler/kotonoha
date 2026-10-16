@@ -5,8 +5,8 @@ non-Wayland (X11) session, or a Wayland compositor that does not implement
 wlr-layer-shell (GNOME/Mutter, Weston, Cinnamon). In those cases the overlay
 degrades: on X11 it is a normal top-most window (``_NET_WM_STATE_ABOVE``) that
 the WM positions; on a layer-shell-less Wayland session it is an ordinary window
-the compositor places and stacks — it cannot stay above other apps and cannot be
-positioned precisely (``self.move()`` is a no-op on Wayland).
+the compositor places and stacks — automatic top-most stacking is unavailable
+and it cannot be positioned precisely (``self.move()`` is a no-op on Wayland).
 
 Backdrop blur is tracked separately from layer-shell (``blur_available`` vs
 ``available``): it rides on the same library but on its own protocols, so a
@@ -21,7 +21,7 @@ import sysconfig
 from pathlib import Path
 
 from .detect import find_layer_shell_library, overlay_mode_available, should_disable_layer_shell
-from .overlay_contracts import OverlayCapabilities
+from .overlay_contracts import OverlayCapabilities, WindowMenuRequest
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ class LayerShellController:
         # same library, and ext-background-effect-v1 works on compositors (Mutter)
         # that have no layer-shell at all.
         self._lib = lib
+        logger.info("Loaded native bridge: %s", lib_path)
 
         # Ask the compositor first. The runtime registry probe answers for THIS
         # session — it catches every layer-shell-less compositor a name match misses
@@ -106,6 +107,12 @@ class LayerShellController:
             lib.koto_has_layer_shell.restype = ctypes.c_int
         if hasattr(lib, "koto_has_blur"):
             lib.koto_has_blur.restype = ctypes.c_int
+        # TODO: remove the absent-symbol guard once pre-menu bridge builds are
+        # no longer supported. Dynamic lookup is confined to this ABI boundary.
+        menu = getattr(lib, "koto_request_window_menu", None)
+        if menu is not None:
+            menu.argtypes = [ctypes.c_void_p]
+            menu.restype = ctypes.c_int
         lib.make_overlay.argtypes = [ctypes.c_void_p]
         lib.set_passthrough.argtypes = [ctypes.c_void_p, ctypes.c_bool]
         lib.set_input_rect.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
@@ -186,6 +193,25 @@ class LayerShellController:
     #
     # The layer-shell calls also require the protocol itself, not just a loaded
     # bridge: the library stays loaded for blur on compositors without layer-shell.
+
+    def request_window_menu(self, window_ptr: int) -> WindowMenuRequest:
+        """Dispatch a menu request using Qt's current Wayland pointer gesture.
+
+        Independent of Layer Shell availability. A sent request does not confirm
+        visibility or a change in stacking; the compositor owns both decisions.
+        """
+        if self._lib is None:
+            logger.warning("System window menu: native bridge unavailable: %s", self._disabled_reason)
+            return WindowMenuRequest.UNAVAILABLE
+        # TODO: remove this guard when pre-menu native bridges are unsupported.
+        menu = getattr(self._lib, "koto_request_window_menu", None)
+        if menu is None:
+            logger.warning("System window menu: loaded native bridge lacks koto_request_window_menu; rebuild it.")
+            return WindowMenuRequest.UNAVAILABLE
+        result = menu(ctypes.c_void_p(window_ptr))
+        if result == 1:
+            return WindowMenuRequest.REQUESTED
+        return WindowMenuRequest.UNAVAILABLE if result == 0 else WindowMenuRequest.REJECTED
 
     def make_overlay(self, window_ptr: int) -> None:
         if self._lib and self._layer_shell:

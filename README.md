@@ -88,10 +88,10 @@ Install the system dependencies first. `uv sync` then builds Kotonoha's native W
 sudo pacman -S cmake qt6-base qt6-wayland layer-shell-qt
 
 # Fedora
-sudo dnf install cmake qt6-qtbase-devel layer-shell-qt-devel wayland-devel gcc-c++
+sudo dnf install cmake qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtwayland-devel qt6-qtwayland-private-devel layer-shell-qt-devel wayland-devel gcc-c++
 
 # Debian/Ubuntu
-sudo apt install cmake build-essential pkg-config qt6-base-dev qt6-base-private-dev qt6-wayland-dev libwayland-dev liblayershellqtinterface-dev
+sudo apt install cmake build-essential pkg-config qt6-base-dev qt6-base-private-dev qt6-wayland-dev qt6-wayland-private-dev libwayland-dev liblayershellqtinterface-dev
 
 # Gentoo
 sudo emerge -a dev-build/cmake kde-plasma/layer-shell-qt dev-qt/qtwayland
@@ -108,7 +108,8 @@ uv run kotonoha
 
 ## Before you start
 
-- Floating above fullscreen requires a compositor that implements `wlr-layer-shell`, such as KDE/KWin or a wlroots-based compositor. GNOME/Mutter falls back to a normal top-most window.
+- Floating above fullscreen requires a compositor that implements `wlr-layer-shell`, such as KDE/KWin or a wlroots-based compositor. GNOME/Mutter falls back to an ordinary window; automatic top-most stacking is unavailable.
+- On GNOME/Mutter Wayland, right-click the unlocked lyrics to request the system window menu and select **Always on Top**. `Alt+Space` also opens this menu when the window has focus. Mutter controls menu availability and stacking; this does not guarantee placement above fullscreen apps or persistence after surface recreation.
 - On GNOME/Mutter Wayland, an unlocked overlay uses the compositor's system move gesture, so dragging does not send client-side window moves or save coordinates that the client cannot verify.
 - Frosted glass requires `ext-background-effect-v1` (KWin 6.7+, Mutter) or the older `org_kde_kwin_blur` (Plasma 6.6 and earlier). Without either, the panel stays translucent but unblurred and the frosted-glass options are greyed out.
 - Browser players expose MPRIS through extensions such as [Plasma Browser Integration](https://github.com/KDE/plasma-browser-integration) and/or `playerctld`.

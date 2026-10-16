@@ -18,6 +18,7 @@ Build-Depends:
  qt6-base-dev,
  qt6-base-private-dev,
  qt6-wayland-dev,
+ qt6-wayland-private-dev,
  liblayershellqtinterface-dev,
  libwayland-dev,
  pkg-config,

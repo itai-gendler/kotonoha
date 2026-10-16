@@ -13,6 +13,7 @@ from .overlay_contracts import (
     OverlayCapabilities,
     SurfaceResult,
     WindowHost,
+    WindowMenuRequest,
     WindowPoint,
     WindowPolicy,
     WindowRectangle,
@@ -164,14 +165,15 @@ class QtWindowPlatform:
         # layer-shell and does speak ext-background-effect-v1, so hardcoding
         # blur=False here dropped the frosted panel on exactly the compositor the
         # blur work was for. When a bridge is available the answer comes from it.
-        self._blur = blur
+        # Retained independently of blur availability for native window menus.
+        self._bridge: LayerShellBridge | None = blur
         self._drag_strategy: DragPort = OrdinaryWindowDragStrategy(
             host, client_positioning=client_positioning, system_move=system_move
         )
 
     @property
     def capabilities(self) -> OverlayCapabilities:
-        blur = self._blur is not None and self._blur.blur_available
+        blur = self._bridge is not None and self._bridge.blur_available
         return OverlayCapabilities(
             layer_shell=False,
             blur=blur,
@@ -181,8 +183,8 @@ class QtWindowPlatform:
             blur_reason=None
             if blur
             else (
-                self._blur.blur_disabled_reason
-                if self._blur is not None
+                self._bridge.blur_disabled_reason
+                if self._bridge is not None
                 else "Ordinary windows have no bridge to request compositor blur."
             ),
             output_rebinding_reason="Ordinary windows cannot rebind a mapped output.",
@@ -210,6 +212,17 @@ class QtWindowPlatform:
     def can_rebind_output(self) -> bool:
         """Delegate release-time output selection to the window drag strategy."""
         return self._drag_strategy.can_rebind_output
+
+    def request_window_menu(self) -> WindowMenuRequest:
+        """Dispatch through the bridge only while this ordinary surface is active."""
+        if self._closed or self._surface_released:
+            return WindowMenuRequest.REJECTED
+        if self._bridge is None:
+            return WindowMenuRequest.UNAVAILABLE
+        pointer = self._host.native_window_pointer()
+        if pointer is None:
+            return WindowMenuRequest.UNAVAILABLE
+        return self._bridge.request_window_menu(pointer)
 
     def prepare(self) -> SurfaceResult:
         if self._closed:
@@ -260,16 +273,16 @@ class QtWindowPlatform:
         # exists — Mutter has no Layer Shell and does speak it — so this is a real
         # operation here, not a permanent failure.
         capabilities = self.capabilities
-        if not capabilities.blur or self._blur is None:
+        if not capabilities.blur or self._bridge is None:
             return SurfaceResult.not_supported(capabilities.blur_reason or "Blur is unavailable.")
         pointer = self._host.native_window_pointer()
         if pointer is None:
             return SurfaceResult.failed("The window handle is unavailable.", retryable=True)
         try:
             if region is None:
-                self._blur.clear_blur(pointer)
+                self._bridge.clear_blur(pointer)
             else:
-                self._blur.set_blur_region(pointer, region.x, region.y, region.width, region.height, radius)
+                self._bridge.set_blur_region(pointer, region.x, region.y, region.width, region.height, radius)
         except (OSError, RuntimeError):
             return SurfaceResult.failed("Blur update failed.", retryable=True)
         return SurfaceResult.applied()

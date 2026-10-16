@@ -228,6 +228,22 @@ class DragUpdateResult:
         return self.operation.reason
 
 
+class WindowMenuRequest(Enum):
+    """Report request dispatch; Wayland does not acknowledge menu visibility."""
+
+    REQUESTED = "Window menu requested; the compositor decides whether to display it."
+    UNAVAILABLE = "The native window menu is unavailable for this surface or build."
+    REJECTED = "The window menu request was declined."
+
+
+class WindowMenuPort(Protocol):
+    """Request a compositor menu synchronously from a real pointer press."""
+
+    def request_window_menu(self) -> WindowMenuRequest:
+        """Dispatch the current pointer gesture without promising menu visibility."""
+        ...
+
+
 class WindowHost(Protocol):
     """Toolkit-neutral surface used by platform adapters."""
 
@@ -388,6 +404,11 @@ class OverlayPlatform(Protocol):
         ...
 
     @property
+    def window_menu(self) -> WindowMenuPort | None:
+        """Return native menu requests when this surface role supports them."""
+        ...
+
+    @property
     def drag(self) -> DragPort:
         """Return the platform-specific drag strategy."""
         ...
@@ -403,6 +424,7 @@ class OverlayPlatformAdapters:
     placement: PlacementPort | None
     output_binding: OutputBindingPort | None
     drag: DragPort
+    window_menu: WindowMenuPort | None = None
 
     @property
     def capabilities(self) -> OverlayCapabilities:
@@ -436,6 +458,8 @@ class LayerShellBridge(Protocol):
 
     @property
     def blur_disabled_reason(self) -> str | None: ...
+
+    def request_window_menu(self, window_ptr: int) -> WindowMenuRequest: ...
 
     def make_overlay(self, window_ptr: int) -> None: ...
 

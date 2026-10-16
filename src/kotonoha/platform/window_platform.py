@@ -20,6 +20,7 @@ from .overlay_contracts import (
     PlacementPort,
     SurfacePort,
     WindowHost,
+    WindowMenuPort,
 )
 from .qt_window import QtWindowPlatform
 
@@ -165,6 +166,7 @@ class _WaylandFallbackProvider:
             placement=adapter if adapter.capabilities.client_positioning else None,
             output_binding=None,
             drag=adapter,
+            window_menu=adapter,
         )
 
 
@@ -195,6 +197,7 @@ def _compose_adapter(
     placement: PlacementPort | None,
     output_binding: OutputBindingPort | None,
     drag: DragPort,
+    window_menu: WindowMenuPort | None = None,
 ) -> OverlayPlatformAdapters:
     """Compose independent capability ports for one selected surface adapter."""
     return OverlayPlatformAdapters(
@@ -204,6 +207,7 @@ def _compose_adapter(
         placement=placement,
         output_binding=output_binding,
         drag=drag,
+        window_menu=window_menu,
     )
 
 

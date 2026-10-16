@@ -19,6 +19,7 @@ BuildRequires:  cmake
 BuildRequires:  qt6-qtbase-devel
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtwayland-devel
+BuildRequires:  qt6-qtwayland-private-devel
 BuildRequires:  layer-shell-qt-devel
 BuildRequires:  wayland-devel
 BuildRequires:  desktop-file-utils
