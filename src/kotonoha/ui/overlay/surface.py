@@ -41,11 +41,13 @@ class OverlaySurfaceController:
         platform_factory: OverlayPlatformFactory,
         band_height: Callable[[], int],
         container_geometry: Callable[[], QRect],
+        input_geometry: Callable[[bool], QRect],
     ) -> None:
         """Create the Qt binding and its explicit platform lifecycle owner."""
         self._widget = widget
         self._config = config
         self._container_geometry = container_geometry
+        self._input_geometry = input_geometry
         self._geometry = OverlayGeometry(config, band_height)
         self._passthrough = config.passthrough
         # Avoid retrying a rejected size through resize events or progress frames.
@@ -399,11 +401,13 @@ class OverlaySurfaceController:
 
     def set_input_mode(self, passthrough: bool) -> SurfaceResult:
         """Set the input mode and immediately report the port result."""
+        if passthrough != self._passthrough:
+            self._input_region_applied = False
         self._passthrough = passthrough
         return self.apply_input_region()
 
     def apply_input_region(self) -> SurfaceResult:
-        """Apply the visible pill region or full click-through to the input port."""
+        """Apply the current presentation-selected input region to the port."""
         input_region = self._platform.input_region
         if input_region is None:
             result = SurfaceResult.not_supported(
@@ -411,11 +415,8 @@ class OverlaySurfaceController:
             )
             self._log_result("input region", result, debug=True)
             return result
-        if self._passthrough:
-            region: WindowRectangle | None = None
-        else:
-            rect = self._container_geometry()
-            region = WindowRectangle(rect.x(), rect.y(), rect.width(), rect.height())
+        rect = self._input_geometry(self._passthrough)
+        region: WindowRectangle | None = WindowRectangle(rect.x(), rect.y(), rect.width(), rect.height())
         if self._input_region_applied and region == self._applied_input_region:
             return SurfaceResult.applied()
         result = input_region.set_input_region(region)

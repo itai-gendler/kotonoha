@@ -108,7 +108,7 @@ def test_input_region_cache_tracks_lock_state_and_geometry(qapp):
         overlay.set_passthrough(True)
         qapp.processEvents()
         assert len(regions) == first_region_count + 1
-        assert regions[-1] is None
+        assert isinstance(regions[-1], WindowRectangle)
 
         overlay.set_passthrough(True)
         qapp.processEvents()
@@ -295,16 +295,32 @@ def test_placeholder_screen_is_never_adopted_while_every_output_is_gone(qapp):
     qapp.processEvents()
 
 
-def test_a_locked_overlay_is_click_through_on_the_fallback_platform(qapp):
-    # The ordinary-window path only positioned the window, so set_input_region was
-    # never called and a config with passthrough on stayed clickable — the locked
-    # overlay swallowed the pointer.
+def test_a_locked_overlay_keeps_only_the_recovery_controls_interactive(qapp):
     overlay = LyricsOverlay(LyricsState(), Config(passthrough=True), UnavailableController())
     regions: list[object] = []
     with patch.object(overlay._platform, "set_input_region", lambda region: regions.append(region) or _ok()):
         overlay.activate_layer_shell()
 
-    assert regions == [None], "the locked overlay never asked for a click-through region"
+    assert len(regions) == 1
+    assert isinstance(regions[0], WindowRectangle)
+    lock_top_left = overlay._lock_btn.mapTo(overlay, QPoint(0, 0))
+    assert regions[0] == WindowRectangle(
+        lock_top_left.x(), lock_top_left.y(), overlay._lock_btn.width(), overlay._lock_btn.height()
+    )
+
+    qapp.processEvents()
+    regions.clear()
+    with patch.object(overlay, "_schedule_input_region") as schedule:
+        overlay._refresh_input_region()
+    schedule.assert_called_once_with()
+    with patch.object(overlay._platform, "set_input_region", lambda region: regions.append(region) or _ok()):
+        overlay._lock_btn.move(overlay._lock_btn.pos() + QPoint(4, 0))
+        overlay._refresh_input_region()
+        qapp.processEvents()
+    updated_top_left = overlay._lock_btn.mapTo(overlay, QPoint(0, 0))
+    assert regions == [WindowRectangle(
+        updated_top_left.x(), updated_top_left.y(), overlay._lock_btn.width(), overlay._lock_btn.height()
+    )]
     overlay.deleteLater()
     qapp.processEvents()
 

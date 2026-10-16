@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 class LyricsOverlay(QWidget):
     # Emitted when the on-HUD lock button is clicked (controller flips passthrough).
     passthrough_toggle_requested = pyqtSignal()
+    quit_requested = pyqtSignal()
     # Emitted when the on-HUD gear button is clicked.
     settings_requested = pyqtSignal()
     # Emitted with the current normalized track when manual lyric search is requested.
@@ -69,6 +70,7 @@ class LyricsOverlay(QWidget):
     _earlier_btn: QToolButton
     _later_btn: QToolButton
     _settings_btn: QToolButton
+    _quit_btn: QToolButton
     _chrome: OverlayChromeController
     _content: OverlayContentController
     _presentation: OverlayPresentationController
@@ -126,6 +128,7 @@ class LyricsOverlay(QWidget):
             platform_factory=platform_factory,
             band_height=self._band_height,
             container_geometry=self._container_geometry,
+            input_geometry=self._input_geometry,
         )
         self.setWindowTitle("Kotonoha")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -270,9 +273,7 @@ class LyricsOverlay(QWidget):
         self._chrome.update_icons()
 
     def _update_chrome(self) -> None:
-        """Locking only hides the interactive controls (you can't click them once
-        the surface is click-through). The panel background is governed by the
-        panel-style setting, NOT the lock state — see paintEvent."""
+        """Keep recovery controls visible while the panel style stays independent."""
         self._chrome.update_visibility()
 
     def _request_lyrics_search(self) -> None:
@@ -421,6 +422,13 @@ class LyricsOverlay(QWidget):
         """
         self._surface.fallback_position(screen if screen is not None else self._target_screen())
 
+    def _input_geometry(self, passthrough: bool) -> QRect:
+        """Return the pill or the lock button as the surface input area."""
+        if not passthrough:
+            return self._container_geometry()
+        top_left = self._lock_btn.mapTo(self, QPoint(0, 0))
+        return QRect(top_left, self._lock_btn.size())
+
     def set_passthrough(self, enabled: bool) -> None:
         if self._closed or self._closing:
             return
@@ -432,8 +440,7 @@ class LyricsOverlay(QWidget):
         self._schedule_input_region()
 
     def _apply_input_region(self) -> None:
-        """Locked -> full click-through. Unlocked -> only the visible pill catches
-        clicks, so the big transparent band around it stays click-through."""
+        """Apply the current pill or lock-button input area."""
         if not self._closed and not self._closing:
             self._surface.set_input_mode(self._passthrough)
 
@@ -443,8 +450,7 @@ class LyricsOverlay(QWidget):
             self._input_region_timer.start(0)
 
     def _refresh_input_region(self) -> None:
-        if not self._passthrough:
-            self._schedule_input_region()
+        self._schedule_input_region()
 
     def _nudge_earlier(self) -> None:
         """Delegate an earlier offset intent to the content owner."""
@@ -475,6 +481,11 @@ class LyricsOverlay(QWidget):
         """Suppress a settings click retargeted from a completed window drag."""
         if not self._finish_control_drag_if_needed():
             self.settings_requested.emit()
+
+    def _on_quit_clicked(self, checked: bool = False) -> None:
+        """Emit the application exit request without leaking Qt's checked flag."""
+        del checked
+        self.quit_requested.emit()
 
     def _finish_control_drag_if_needed(self) -> bool:
         """Finish a release delivered to a moving child without activating it."""

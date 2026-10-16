@@ -87,6 +87,15 @@ class OverlayChromeController:
         overlay._settings_btn.setToolTip(self._translator.text("overlay.settings"))
         overlay._settings_btn.clicked.connect(overlay._on_settings_clicked)
         bar.addWidget(overlay._settings_btn)
+
+        overlay._quit_btn = QToolButton(container)
+        overlay._quit_btn.setFixedSize(22, 22)
+        overlay._quit_btn.setText("×")
+        overlay._quit_btn.setStyleSheet(CONTROL_BUTTON_STYLE)
+        overlay._quit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        overlay._quit_btn.setToolTip(self._translator.text("overlay.quit"))
+        overlay._quit_btn.clicked.connect(overlay._on_quit_clicked)
+        bar.addWidget(overlay._quit_btn)
         self.update_icons()
         return overlay._control_bar
 
@@ -110,13 +119,15 @@ class OverlayChromeController:
         self._overlay._search_btn.setEnabled(has_track)
 
     def update_visibility(self) -> None:
-        """Hide controls while click-through mode is active."""
+        """Keep a small recovery strip while lyrics remain click-through."""
         overlay = self._overlay
         visible = not overlay._passthrough
-        overlay._control_bar.setVisible(visible)
         overlay._search_btn.setVisible(visible)
         overlay._earlier_btn.setVisible(visible)
         overlay._later_btn.setVisible(visible)
+        overlay._settings_btn.setVisible(visible)
+        overlay._quit_btn.setVisible(visible)
+        overlay._control_bar.setVisible(True)
         overlay.update()
 
     def _control_icon_color(self) -> str:

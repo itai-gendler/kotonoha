@@ -92,6 +92,11 @@ class OverlayPort(Protocol):
         ...
 
     @property
+    def quit_requested(self) -> SignalPort:
+        """Return the user-requested application exit signal."""
+        ...
+
+    @property
     def lyrics_search_requested(self) -> SignalPort:
         """Return the user-requested manual lyric-search signal."""
         ...

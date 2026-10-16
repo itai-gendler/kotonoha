@@ -60,6 +60,7 @@ class _FakeOverlay:
     def __init__(self, events: list[str] | None = None) -> None:
         self._events = events
         self.passthrough_toggle_requested = _Signal()
+        self.quit_requested = _Signal()
         self.settings_requested = _Signal()
         self.lyrics_search_requested = _Signal()
         self.position_changed = _Signal()

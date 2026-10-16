@@ -90,6 +90,7 @@ class AppController:
         self._stopped: bool = False
 
         self._overlay.passthrough_toggle_requested.connect(self._toggle_passthrough)
+        self._overlay.quit_requested.connect(self._quit_port.quit)
         self._overlay.settings_requested.connect(self._open_settings)
         self._overlay.lyrics_search_requested.connect(self._open_lyrics_search)
         self._overlay.position_changed.connect(self._handle_intent)

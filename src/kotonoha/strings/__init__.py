@@ -41,6 +41,7 @@ STRINGS: dict[str, dict[str, str]] = {
                          "zh-Hant": "已解鎖（可拖動）— 點擊鎖定並穿透",
                          "ja": "解除中（移動可）— クリックでロックして透過"},
     "overlay.settings": {"en": "Settings", "zh-Hans": "设置", "zh-Hant": "設定", "ja": "設定"},
+    "overlay.quit": {"en": "Quit", "zh-Hans": "退出", "zh-Hant": "結束", "ja": "終了"},
     "overlay.idle": {"en": "♪ Waiting for music…", "zh-Hans": "♪ 等待音乐…",
                       "zh-Hant": "♪ 等待音樂…", "ja": "♪ 音楽を待っています…"},
     "overlay.offset.earlier": {"en": "Move lyrics earlier by 100 ms", "zh-Hans": "歌词提前 100 毫秒",
