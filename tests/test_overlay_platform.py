@@ -24,7 +24,7 @@ from overlay_helpers import (
     build_overlay as LyricsOverlay,
 )
 from PyQt6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
-from PyQt6.QtGui import QGuiApplication, QMouseEvent
+from PyQt6.QtGui import QColor, QGuiApplication, QImage, QMouseEvent, QPalette
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from kotonoha.config import Config, PanelStyle
@@ -367,13 +367,28 @@ def test_the_qt_host_shapes_and_clears_the_real_input_mask(qapp):
     from kotonoha.platform.qt_host import QtWindowHost
 
     widget = QWidget()
+    widget.resize(100, 50)
+    palette = widget.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("red"))
+    widget.setPalette(palette)
+    widget.setAutoFillBackground(True)
+    widget.show()
+    qapp.processEvents()
     host = QtWindowHost(widget)
 
     host.set_input_mask(WindowRectangle(3, 4, 20, 10))
-    assert widget.mask().boundingRect() == QRect(3, 4, 20, 10)
+
+    # A lock-button-sized input region must not clip the lyrics painted outside it.
+    image = QImage(widget.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    widget.render(image)
+    assert image.pixelColor(80, 30) == QColor("red")
+    handle = widget.windowHandle()
+    assert handle is not None
+    assert handle.mask().boundingRect() == QRect(3, 4, 20, 10)
 
     host.clear_input_mask()
-    assert widget.mask().isEmpty()
+    assert handle.mask().isEmpty()
     widget.deleteLater()
     qapp.processEvents()
 

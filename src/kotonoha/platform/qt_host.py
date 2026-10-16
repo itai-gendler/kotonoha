@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import PyQt6.sip as sip
 from PyQt6.QtCore import QRect, Qt
-from PyQt6.QtGui import QRegion
+from PyQt6.QtGui import QRegion, QWindow
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from .overlay_contracts import WindowPoint, WindowPolicy, WindowRectangle
@@ -128,16 +128,27 @@ class QtWindowHost:
     def set_input_mask(self, region: WindowRectangle) -> None:
         """Confine pointer input to one rectangle.
 
-        Qt's mask is the toolkit's own input shaping: on X11 it sets the input
-        shape, and the Wayland plugin turns it into wl_surface.set_input_region.
-        Without it an ordinary window accepted clicks across its whole transparent
-        band and swallowed input meant for the window behind it."""
-        self._widget.setMask(QRegion(region.x, region.y, region.width, region.height))
+        The Wayland plugin maps QWindow's mask to wl_surface.set_input_region.
+        Apply it directly to the native window: QWidget.setMask also clips Qt's
+        backing-store painting, hiding the lyrics outside the lock button.
+        The platform plugin owns native shaping; X11 may also shape visibility.
+        Without shaping an ordinary window swallows input across its transparent
+        band, including clicks meant for the window behind it.
+        """
+        self._input_window().setMask(QRegion(region.x, region.y, region.width, region.height))
 
     def clear_input_mask(self) -> None:
         """Remove the shaping. Click-through is carried by the window policy, so
         this never doubles as "accept nothing"."""
-        self._widget.clearMask()
+        self._input_window().setMask(QRegion())
+
+    def _input_window(self) -> QWindow:
+        """Ensure a native handle exists or report failure to the platform adapter."""
+        self._widget.winId()
+        handle = self._widget.windowHandle()
+        if handle is None:
+            raise RuntimeError("The window handle is unavailable for input shaping.")
+        return handle
 
     def refresh(self) -> None:
         self._widget.update()
