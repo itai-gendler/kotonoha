@@ -88,7 +88,7 @@ Release 会使用 Python 3.13 或更高版本进行检查。Python 3.11 和 3.12
 sudo pacman -S cmake qt6-base qt6-wayland layer-shell-qt
 
 # Fedora
-sudo dnf install cmake qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtwayland-devel qt6-qtwayland-private-devel layer-shell-qt-devel wayland-devel gcc-c++
+sudo dnf install cmake qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtwayland-devel layer-shell-qt-devel wayland-devel gcc-c++
 
 # Debian/Ubuntu
 sudo apt install cmake build-essential pkg-config qt6-base-dev qt6-base-private-dev qt6-wayland-dev qt6-wayland-private-dev libwayland-dev liblayershellqtinterface-dev

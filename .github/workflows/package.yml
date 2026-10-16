@@ -189,7 +189,6 @@ jobs:
             qt6-qtbase-devel \
             qt6-qtbase-private-devel \
             qt6-qtwayland-devel \
-            qt6-qtwayland-private-devel \
             rpm-build \
             tar \
             wayland-devel
