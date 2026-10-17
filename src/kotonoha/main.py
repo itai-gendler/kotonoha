@@ -129,6 +129,8 @@ def entry_point() -> int:
 
     app = QApplication(sys.argv)
     app.setApplicationName("kotonoha")
+    # Match kotonoha.desktop so GNOME associates Wayland windows with the app.
+    app.setDesktopFileName("kotonoha")
     app.setQuitOnLastWindowClosed(False)  # overlay close should not kill the tray
     app.setProperty("xdg_current_desktop", current_desktop())
     app.setProperty("cli_port", args.port)

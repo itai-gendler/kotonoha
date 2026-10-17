@@ -17,8 +17,9 @@ Exec=kotonoha
 Icon=kotonoha
 Terminal=false
 # Tray app: no window appears on launch under some sessions, so suppress the
-# startup-notification spinner. StartupWMClass matches the app_id/WM_CLASS Qt
-# derives from setApplicationName("kotonoha") for the top-most fallback window.
+# startup-notification spinner. Qt's setDesktopFileName("kotonoha") associates
+# Wayland windows with this entry; StartupWMClass matches the X11 WM_CLASS
+# derived from setApplicationName("kotonoha") for the top-most fallback window.
 StartupNotify=false
 StartupWMClass=kotonoha
 Categories=AudioVideo;Audio;
