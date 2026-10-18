@@ -188,10 +188,19 @@ class KaraokeLabel(QWidget):
     def _rebuild_layout(self) -> None:
         text = self.text
         self._total_w = self._fm.horizontalAdvance(text) if text else 0.0
-        self._word_widths = (
-            [self._fm.horizontalAdvance(w.text) for w in self._line.words] if self._line else []
-        )
         self._word_offsets = measure_word_offsets(self._line, self._fm)
+        if self._line and self._word_offsets:
+            # Independent glyph advances can differ by one pixel because of
+            # shaping/rounding; adjacent offsets preserve the rendered extent.
+            self._word_widths = [
+                max(
+                    0.0,
+                    (self._word_offsets[i + 1] if i + 1 < len(self._word_offsets) else self._total_w) - offset,
+                )
+                for i, offset in enumerate(self._word_offsets)
+            ]
+        else:
+            self._word_widths = []
         self._wrapped = None
         if (
             self._overflow_mode is PanelOverflowMode.WRAP

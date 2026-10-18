@@ -69,10 +69,7 @@ class NativeBridgeBuilder:
                 ])
                 self._run(["cmake", "--build", str(build_dir), "--parallel", "2"])
                 candidate = build_dir / "libkoto-layer.so"
-                self._run([
-                    str(self.python_executable), "-I", "-m", "kotonoha.platform.bridge_probe",
-                    str(candidate),
-                ])
+                self._run(self._probe_command(self.python_executable, candidate))
                 candidate.chmod(0o755)
                 os.replace(candidate, self.state_dir / "libkoto-layer.so")
 
@@ -92,6 +89,28 @@ class NativeBridgeBuilder:
                 raise
             if returncode != 0:
                 raise subprocess.CalledProcessError(returncode, command)
+
+    @staticmethod
+    def _probe_command(python_executable: Path, candidate: Path) -> list[str]:
+        """Build an isolated ABI probe without importing the app package."""
+        probe = "\n".join([
+            "import ctypes,sys",
+            "from PyQt6.QtCore import qVersion",
+            "library=ctypes.CDLL(sys.argv[1])",
+            "version=getattr(library,'koto_layer_qt_version',None)",
+            "if version is not None:",
+            " version.restype=ctypes.c_char_p",
+            " built=version().decode('ascii')",
+            " running=qVersion()",
+            " def family(value):",
+            "  parts=value.split('.')",
+            "  valid=len(parts)>=3 and all(part.isdecimal() for part in parts[:3])",
+            "  if not valid: raise OSError('Invalid Qt version: '+repr(value))",
+            "  return tuple(int(part) for part in parts[:2])",
+            " if family(built)!=family(running):",
+            "  raise OSError(f'bridge built against Qt {built}, PyQt6 runtime is Qt {running}')",
+        ])
+        return [str(python_executable), "-I", "-c", probe, str(candidate)]
 
 
 def main() -> int:
