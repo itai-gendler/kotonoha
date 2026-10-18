@@ -25,4 +25,3 @@ override_dh_install:
 	mkdir -p debian/kotonoha/usr/share/kotonoha/native/src/kotonoha/protocols
 	cp src/kotonoha/protocols/*.xml debian/kotonoha/usr/share/kotonoha/native/src/kotonoha/protocols/
 	mkdir -p debian/kotonoha/var/lib/kotonoha
-	ln -s /var/lib/kotonoha/libkoto-layer.so debian/kotonoha/usr/lib/python3/dist-packages/kotonoha/libkoto-layer.so

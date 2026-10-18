@@ -82,8 +82,19 @@ fi
 
 # Private Qt ABI may change after installation. Run after the whole transaction,
 # when both runtime libraries and matching development headers are available.
-%transfiletriggerin -- %{_libdir}/libQt6 %{_libdir}/libLayerShellQtInterface %{_includedir}/qt6
-if [ -x %{_prefix}/lib/kotonoha/rebuild-bridge ]; then
+# RPM indexes file triggers by directory; a partial library filename does not
+# match its directory index. Subscribe to real directories, then filter stdin
+# so unrelated library transactions do not compile the bridge.
+%transfiletriggerin -- %{_libdir} %{_includedir}/qt6
+rebuild_needed=0
+while IFS= read -r installed_path; do
+    case "$installed_path" in
+        %{_libdir}/libQt6*.so*|%{_libdir}/libLayerShellQtInterface.so*|%{_includedir}/qt6/*)
+            rebuild_needed=1
+            ;;
+    esac
+done
+if [ "$rebuild_needed" -eq 1 ] && [ -x %{_prefix}/lib/kotonoha/rebuild-bridge ]; then
     if ! %{_prefix}/lib/kotonoha/rebuild-bridge; then
         echo "Qt update completed, but Kotonoha bridge rebuild failed; retry: sudo /usr/lib/kotonoha/rebuild-bridge" >&2
         exit 1
