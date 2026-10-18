@@ -122,18 +122,49 @@ jobs:
           debs=(dist/deb/kotonoha_*_"${PACKAGE_ARCH}".deb)
           test "${#debs[@]}" -eq 1
           test "$(dpkg-deb --field "${debs[0]}" Architecture)" = "$PACKAGE_ARCH"
+          payload=$(mktemp -d)
+          dpkg-deb --extract "${debs[0]}" "$payload"
+          packaged_bridge="$payload/usr/lib/python3/dist-packages/kotonoha/libkoto-layer.so"
+          test -L "$packaged_bridge"
+          test "$(readlink "$packaged_bridge")" = /var/lib/kotonoha/libkoto-layer.so
+          test -z "$(find "$payload" -type f -name '*.so' -print)"
           apt-get install -y "./${debs[0]}"
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
+          # Repeated configuration and upgrade-trigger rebuilds must remain usable.
+          rm /var/lib/kotonoha/libkoto-layer.so
+          dpkg-trigger --by-package=kotonoha --no-await /usr/include/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/qt6
+          dpkg --triggers-only kotonoha
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
           python3 -c "import kotonoha.main"
           python3 -c "from PyQt6.QtSvg import QSvgRenderer"
           command -v kotonoha
-          bridge_dir=$(python3 -c "import pathlib, kotonoha; print(pathlib.Path(kotonoha.__file__).parent)")
-          mapfile -t bridges < <(find "$bridge_dir" -maxdepth 1 -type f -name 'libkoto-layer*.so' -print)
-          test "${#bridges[@]}" -eq 1
           test -f /usr/share/applications/kotonoha.desktop
           test -f /usr/share/pixmaps/kotonoha.png
           test -f /usr/share/metainfo/dev.locez.kotonoha.metainfo.xml
           ls /usr/share/man/man1/kotonoha.1* >/dev/null  # glob: compressed .gz/.zst or plain
           desktop-file-validate /usr/share/applications/kotonoha.desktop
+      - name: Verify DEB build failure, recovery, and removal
+        run: |
+          set -euo pipefail
+          native_source=/usr/share/kotonoha/native/CMakeLists.txt
+          cp "$native_source" /tmp/kotonoha-native-cmake
+          trap 'cp /tmp/kotonoha-native-cmake "$native_source"' EXIT
+          echo 'message(FATAL_ERROR "Injected build failure for package lifecycle validation")' >> "$native_source"
+          rm /var/lib/kotonoha/libkoto-layer.so
+          dpkg-trigger --by-package=kotonoha --no-await /usr/include/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/qt6
+          if dpkg --triggers-only kotonoha; then
+            echo "Expected DEB configuration failure" >&2
+            exit 1
+          fi
+          test "$(dpkg-query -W -f='${Status}' kotonoha)" = 'install ok half-configured'
+          test ! -e /var/lib/kotonoha/libkoto-layer.so
+          cp /tmp/kotonoha-native-cmake "$native_source"
+          trap - EXIT
+          dpkg --configure kotonoha
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
+          apt-get remove -y kotonoha
+          test ! -e /var/lib/kotonoha/libkoto-layer.so
+          test ! -e /var/lib/kotonoha/build.lock
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: kotonoha-deb-${{ matrix.arch }}
@@ -226,7 +257,14 @@ jobs:
           rpms=(dist/rpm/kotonoha-"${VERSION}"-*."${PACKAGE_ARCH}".rpm)
           test "${#rpms[@]}" -eq 1
           test "$(rpm -qp --queryformat '%{ARCH}' "${rpms[0]}")" = "$PACKAGE_ARCH"
+          rpm -qp --queryformat '[%{FILENAMES}|%{FILELINKTOS}\n]' "${rpms[0]}" > /tmp/kotonoha-payload
+          grep -E '^/usr/lib(64)?/python[^/]+/site-packages/kotonoha/libkoto-layer.so\|/var/lib/kotonoha/libkoto-layer.so$' /tmp/kotonoha-payload
           dnf install -y "./${rpms[0]}"
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
+          # Exercise the Qt update trigger with a real package transaction.
+          rm /var/lib/kotonoha/libkoto-layer.so
+          dnf reinstall -y qt6-qtbase
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
           python3 -c "import qasync"
           python3 -c "from PyQt6.QtSvg import QSvgRenderer"
           python3 -c "import kotonoha.main"
@@ -238,6 +276,28 @@ jobs:
           test -f /usr/share/metainfo/dev.locez.kotonoha.metainfo.xml
           ls /usr/share/man/man1/kotonoha.1* >/dev/null  # glob: compressed .gz/.zst or plain
           desktop-file-validate /usr/share/applications/kotonoha.desktop
+      - name: Verify RPM build failure, recovery, and removal
+        run: |
+          set -euo pipefail
+          native_source=/usr/share/kotonoha/native/CMakeLists.txt
+          cp "$native_source" /tmp/kotonoha-native-cmake
+          trap 'cp /tmp/kotonoha-native-cmake "$native_source"' EXIT
+          echo 'message(FATAL_ERROR "Injected build failure for package lifecycle validation")' >> "$native_source"
+          rm /var/lib/kotonoha/libkoto-layer.so
+          # RPM scriptlet failures may leave a successful transaction exit code.
+          # Inspect actual package/artifact state rather than assuming rollback.
+          if ! dnf reinstall -y qt6-qtbase; then
+            echo "Qt transaction reported the injected bridge failure" >&2
+          fi
+          rpm -q kotonoha
+          test ! -e /var/lib/kotonoha/libkoto-layer.so
+          cp /tmp/kotonoha-native-cmake "$native_source"
+          trap - EXIT
+          /usr/lib/kotonoha/rebuild-bridge
+          /usr/bin/python3 -I scripts/verify_local_bridge.py
+          dnf remove -y kotonoha
+          test ! -e /var/lib/kotonoha/libkoto-layer.so
+          test ! -e /var/lib/kotonoha/build.lock
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: kotonoha-rpm-${{ matrix.arch }}

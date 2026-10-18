@@ -21,6 +21,7 @@ import sysconfig
 from pathlib import Path
 
 from .detect import find_layer_shell_library, overlay_mode_available, should_disable_layer_shell
+from .native_abi import load_bridge
 from .overlay_contracts import OverlayCapabilities, WindowMenuRequest
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,10 @@ class LayerShellController:
 
         lib_path = find_layer_shell_library(package_dir)
         if not lib_path:
-            self._disabled_reason = "libkoto-layer.so not found; run uv sync or build the wheel."
+            self._disabled_reason = (
+                "libkoto-layer.so not found; for DEB/RPM run "
+                "sudo /usr/lib/kotonoha/rebuild-bridge; for source installs run uv sync."
+            )
             logger.info("%s", self._disabled_reason)
             return
 
@@ -90,19 +94,12 @@ class LayerShellController:
 
     @staticmethod
     def _load(lib_path: str) -> ctypes.CDLL:
-        lib = ctypes.CDLL(lib_path)
+        lib = load_bridge(Path(lib_path))
         # Qt ABI handshake when the bridge exposes it: the bridge links Qt private /
         # QPA API, which has no cross-minor ABI guarantee, so refuse a bridge built
         # against a different Qt minor than the PyQt6 runtime. This only bites a
-        # mismatched prebuilt wheel (manual pip); a distro build shares one system
-        # Qt, and an older bridge without the symbol simply skips the check.
-        if hasattr(lib, "koto_layer_qt_version"):
-            from PyQt6.QtCore import QT_VERSION_STR
-
-            lib.koto_layer_qt_version.restype = ctypes.c_char_p
-            built = lib.koto_layer_qt_version().decode()
-            if built.split(".")[:2] != QT_VERSION_STR.split(".")[:2]:
-                raise OSError(f"bridge built against Qt {built}, PyQt6 runtime is Qt {QT_VERSION_STR}")
+        # mismatched prebuilt wheel or a distro bridge awaiting a local rebuild
+        # after a Qt upgrade. An older bridge without the symbol skips the check.
         if hasattr(lib, "koto_has_layer_shell"):
             lib.koto_has_layer_shell.restype = ctypes.c_int
         if hasattr(lib, "koto_has_blur"):

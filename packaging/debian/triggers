@@ -1,0 +1,10 @@
+# Directory triggers cover versioned library files and private header upgrades.
+# noawait avoids dependency cycles while Qt's own packages are configuring.
+interest-noawait /usr/include/x86_64-linux-gnu/qt6
+interest-noawait /usr/include/aarch64-linux-gnu/qt6
+interest-noawait /usr/lib/x86_64-linux-gnu/libQt6Core.so.6
+interest-noawait /usr/lib/aarch64-linux-gnu/libQt6Core.so.6
+interest-noawait /usr/lib/x86_64-linux-gnu/libQt6WaylandClient.so.6
+interest-noawait /usr/lib/aarch64-linux-gnu/libQt6WaylandClient.so.6
+interest-noawait /usr/lib/x86_64-linux-gnu/libLayerShellQtInterface.so.6
+interest-noawait /usr/lib/aarch64-linux-gnu/libLayerShellQtInterface.so.6

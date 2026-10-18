@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 
 export PYBUILD_NAME=kotonoha
+export SKBUILD_CMAKE_DEFINE=KOTONOHA_BUILD_BRIDGE=OFF
 
 %:
 	dh $@ --buildsystem=pybuild
@@ -17,3 +18,11 @@ override_dh_clean:
 override_dh_install:
 	dh_install
 	install -Dm644 src/kotonoha/assets/icon.png debian/kotonoha/usr/share/pixmaps/kotonoha.png
+	install -Dm755 scripts/rebuild_bridge.py debian/kotonoha/usr/lib/kotonoha/rebuild-bridge
+	install -Dm644 CMakeLists.txt debian/kotonoha/usr/share/kotonoha/native/CMakeLists.txt
+	install -Dm644 LICENSE debian/kotonoha/usr/share/kotonoha/native/LICENSE
+	install -Dm644 src/kotonoha/layer_shell_bridge.cpp debian/kotonoha/usr/share/kotonoha/native/src/kotonoha/layer_shell_bridge.cpp
+	mkdir -p debian/kotonoha/usr/share/kotonoha/native/src/kotonoha/protocols
+	cp src/kotonoha/protocols/*.xml debian/kotonoha/usr/share/kotonoha/native/src/kotonoha/protocols/
+	mkdir -p debian/kotonoha/var/lib/kotonoha
+	ln -s /var/lib/kotonoha/libkoto-layer.so debian/kotonoha/usr/lib/python3/dist-packages/kotonoha/libkoto-layer.so

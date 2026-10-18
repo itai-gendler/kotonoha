@@ -1,4 +1,4 @@
-# The native bridge is installed into the wheel by scikit-build-core.
+# Native sources ship in the RPM; transaction hooks build against local Qt.
 %global debug_package %{nil}
 
 Name:           kotonoha
@@ -27,6 +27,14 @@ Requires:       python3-pyqt6
 Requires:       python3-aiohttp
 Requires:       python3-dbus-fast
 Requires:       layer-shell-qt
+Requires:       cmake
+Requires:       gcc-c++
+Requires:       pkgconf-pkg-config
+Requires:       qt6-qtbase-devel
+Requires:       qt6-qtbase-private-devel
+Requires:       qt6-qtwayland-devel
+Requires:       layer-shell-qt-devel
+Requires:       wayland-devel
 Recommends:     python3-mutagen
 Provides:       bundled(python3dist(qasync)) = 0.28.0
 
@@ -38,11 +46,20 @@ Wayland layer-shell overlay.
 %autosetup
 
 %build
+export SKBUILD_CMAKE_DEFINE=KOTONOHA_BUILD_BRIDGE=OFF
 %pyproject_wheel
 
 %install
 %pyproject_install
 %pyproject_save_files kotonoha
+install -Dm0755 scripts/rebuild_bridge.py %{buildroot}%{_prefix}/lib/kotonoha/rebuild-bridge
+install -Dm0644 CMakeLists.txt %{buildroot}%{_datadir}/kotonoha/native/CMakeLists.txt
+install -Dm0644 LICENSE %{buildroot}%{_datadir}/kotonoha/native/LICENSE
+install -Dm0644 src/kotonoha/layer_shell_bridge.cpp %{buildroot}%{_datadir}/kotonoha/native/src/kotonoha/layer_shell_bridge.cpp
+mkdir -p %{buildroot}%{_datadir}/kotonoha/native/src/kotonoha/protocols
+cp src/kotonoha/protocols/*.xml %{buildroot}%{_datadir}/kotonoha/native/src/kotonoha/protocols/
+mkdir -p %{buildroot}/var/lib/kotonoha
+ln -s /var/lib/kotonoha/libkoto-layer.so %{buildroot}%{python3_sitearch}/kotonoha/libkoto-layer.so
 python3 -m zipfile -e %{SOURCE1} %{buildroot}%{python3_sitelib}
 install -Dm0644 packaging/kotonoha.desktop \
     %{buildroot}%{_datadir}/applications/kotonoha.desktop
@@ -56,7 +73,36 @@ install -Dm0644 packaging/kotonoha.1 \
 %check
 desktop-file-validate %{buildroot}%{_datadir}/applications/kotonoha.desktop
 
+%posttrans
+if ! %{_prefix}/lib/kotonoha/rebuild-bridge; then
+    echo "Kotonoha RPM is installed, but the native bridge rebuild failed; RPM cannot roll back this transaction." >&2
+    echo "Fix the build error, then run: sudo /usr/lib/kotonoha/rebuild-bridge" >&2
+    exit 1
+fi
+
+# Private Qt ABI may change after installation. Run after the whole transaction,
+# when both runtime libraries and matching development headers are available.
+%transfiletriggerin -- %{_libdir}/libQt6 %{_libdir}/libLayerShellQtInterface %{_includedir}/qt6
+if [ -x %{_prefix}/lib/kotonoha/rebuild-bridge ]; then
+    if ! %{_prefix}/lib/kotonoha/rebuild-bridge; then
+        echo "Qt update completed, but Kotonoha bridge rebuild failed; retry: sudo /usr/lib/kotonoha/rebuild-bridge" >&2
+        exit 1
+    fi
+fi
+
+%postun
+if [ "$1" -eq 0 ]; then
+    rm -f /var/lib/kotonoha/libkoto-layer.so /var/lib/kotonoha/build.lock
+    if [ -d /var/lib/kotonoha ]; then rmdir /var/lib/kotonoha; fi
+fi
+
 %files -f %{pyproject_files}
+%{_prefix}/lib/kotonoha/
+%{_datadir}/kotonoha/
+%{python3_sitearch}/kotonoha/libkoto-layer.so
+%dir /var/lib/kotonoha
+%ghost /var/lib/kotonoha/libkoto-layer.so
+%ghost /var/lib/kotonoha/build.lock
 %doc README.md
 %license %{python3_sitearch}/share/licenses/kotonoha/LICENSE
 %{_bindir}/kotonoha

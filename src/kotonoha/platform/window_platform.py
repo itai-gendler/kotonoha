@@ -148,9 +148,12 @@ class _WaylandFallbackProvider:
             return None
         # Still hand over the bridge: a Wayland compositor without Layer Shell can
         # speak a blur protocol, which is exactly the Mutter case.
+        reason = "Layer Shell is unavailable; no native bridge was supplied."
+        if self._controller is not None and self._controller.disabled_reason is not None:
+            reason = self._controller.disabled_reason
         adapter = QtWindowPlatform(
             host,
-            reason="Wayland compositor does not provide Layer Shell.",
+            reason=reason,
             blur=self._controller,
             # Wayland gives a client no way to place its own toplevel, and no
             # readback can tell: Qt reports the requested position either way.

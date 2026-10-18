@@ -204,11 +204,19 @@ def test_wayland_fallback_explains_rejected_layer_shell() -> None:
     )(_FakeHost())
 
     assert isinstance(platform.surface, QtWindowPlatform)
-    assert platform.capabilities.layer_shell_reason == "Wayland compositor does not provide Layer Shell."
+    assert platform.capabilities.layer_shell_reason == "Fake compositor rejected Layer Shell."
     # Blur is a separate capability, so the reason comes from the bridge rather
     # than from the window being an ordinary one.
     assert platform.capabilities.blur is False
     assert platform.capabilities.blur_reason
+
+
+def test_wayland_fallback_preserves_bridge_build_failure_reason() -> None:
+    """A failed local build must not be presented as missing compositor support."""
+    controller = _FakeController(False)
+    controller.disabled_reason = "Failed to load layer-shell library: bridge Qt version mismatch"
+    platform = DefaultOverlayPlatformFactory(controller, platform_name="wayland")(_FakeHost())
+    assert platform.capabilities.layer_shell_reason == controller.disabled_reason
 
 
 def test_a_wayland_fallback_keeps_blur_when_the_compositor_offers_it() -> None:

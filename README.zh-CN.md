@@ -40,6 +40,18 @@ DEB、RPM 和 Linux wheel 均提供 x86_64 与 ARM64（aarch64）构建。DEB �
 - Fedora：`sudo dnf install ./kotonoha-*."$(uname -m)".rpm`
 - Arch Linux：`paru -S kotonoha-git`
 
+DEB 和 RPM 包会在安装时使用本机 Qt 编译 `libkoto-layer.so`，并在相关 Qt 或
+LayerShellQt 更新后重建。为此，包管理器会安装并保留 CMake、C++ 编译器和匹配的开发头文件；
+安装过程中无需下载源码。构建错误会由包管理器报告，可运行
+`sudo /usr/lib/kotonoha/rebuild-bridge` 手动重试。升级 Qt 后请重启 Kotonoha。
+Linux wheel 仍携带预编译桥，需要兼容的 Qt 库。
+
+如果本地构建失败，旧桥会保留；Qt 更新后它可能不再兼容，应用会在检测到版本不匹配时禁用桥。
+首次安装没有可用桥时，同样会降级为普通窗口；这不表示 compositor 缺少 Layer Shell。
+DEB 会保持未完成配置状态，修复构建错误后运行 `sudo dpkg --configure kotonoha`。
+RPM 的安装后脚本失败不会回滚已安装的软件包或 Qt 更新；请修复错误后运行上面的重建命令。
+编译输出直接显示在包管理器终端中。重建成功后请重启 Kotonoha。
+
 Gentoo 用户可以启用 [gentoo-zh overlay](https://github.com/gentoo-zh/overlay)：
 
 ```bash

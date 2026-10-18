@@ -40,6 +40,23 @@ DEB, RPM, and Linux wheel packages are built for x86_64 and ARM64 (aarch64). DEB
 - Fedora: `sudo dnf install ./kotonoha-*."$(uname -m)".rpm`
 - Arch Linux: `paru -S kotonoha-git`
 
+DEB and RPM packages compile `libkoto-layer.so` against your system Qt during
+installation and rebuild it after relevant Qt or LayerShellQt updates. The package
+manager installs and retains CMake, a C++ compiler, and the matching development
+headers for this purpose; installation requires no source downloads. Build errors
+are reported by the package manager. To retry manually, run
+`sudo /usr/lib/kotonoha/rebuild-bridge`. Restart Kotonoha after upgrading Qt.
+Linux wheels still contain a prebuilt bridge and require compatible Qt libraries.
+
+If compilation fails, the previous bridge is preserved. It may be incompatible
+after a Qt update; the application disables the bridge when its version check
+fails. A first install without a bridge also falls back to an ordinary window;
+this does not mean the compositor lacks Layer Shell. DEB remains unconfigured:
+fix the build error and run `sudo dpkg --configure kotonoha`. An RPM post-install
+failure does not roll back the installed package or Qt update: fix the error and
+retry the rebuild command above. Compiler output appears in the package manager's
+terminal. Restart Kotonoha after a successful rebuild.
+
 For Gentoo, enable the [gentoo-zh overlay](https://github.com/gentoo-zh/overlay):
 
 ```bash

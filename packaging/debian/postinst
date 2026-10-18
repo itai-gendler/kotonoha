@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+case "$1" in
+    configure|triggered)
+        if ! /usr/lib/kotonoha/rebuild-bridge; then
+            echo "Kotonoha configuration incomplete: native bridge rebuild failed." >&2
+            echo "Fix the build error, then run: sudo dpkg --configure kotonoha" >&2
+            exit 1
+        fi
+        ;;
+esac
+#DEBHELPER#

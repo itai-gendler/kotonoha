@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+case "$1" in
+    remove|purge)
+        rm -f /var/lib/kotonoha/libkoto-layer.so /var/lib/kotonoha/build.lock
+        if [ -d /var/lib/kotonoha ]; then rmdir /var/lib/kotonoha; fi
+        ;;
+esac
+#DEBHELPER#

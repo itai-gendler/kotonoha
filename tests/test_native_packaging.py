@@ -102,7 +102,8 @@ def test_cmake_and_package_workflows_verify_native_bridge() -> None:
     assert "bridge=src/kotonoha/libkoto-layer.so" not in package_workflow
     assert "--python-tag py3" in package_workflow
     assert "--abi-tag none" in package_workflow
-    assert "libkoto-layer*.so" in package_workflow
+    # Distro bridges are now symlinks. Their installed loading contract is
+    # exercised by verify_local_bridge in CI, replacing the old find glob.
     assert "Verify standalone CMake install" in test_workflow
     assert "-DCMAKE_BUILD_TYPE=Release" in test_workflow
     assert 'cmake --build "$cmake_build" --config Release' in test_workflow
